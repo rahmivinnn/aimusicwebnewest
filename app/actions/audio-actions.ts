@@ -1,10 +1,14 @@
 "use server"
 
 import { generateBackgroundMusic, generateRemix, generateSpeechWithMusic } from "@/lib/riffusion-service"
+import { generateTextToSong } from "@/lib/text-to-song-service"
+import { verifyAudioQuality } from "@/lib/audio-quality-validator"
 
 // Define constants locally instead of exporting them
-// Riffusion API key - Professional audio tier
-const RIFFUSION_API_KEY = "sk-ebfcc1a7d768b55f533eb6194e07f29b8c257373a7bdfcf634f937a0a5bba274"
+// Stability AI API key - Professional audio tier
+const STABILITY_API_KEY = "sk-ebfcc1a7d768b55f533eb6194e07f29b8c257373a7bdfcf634f937a0a5bba274"
+// Text-to-Song API key
+const TEXT_TO_SONG_API_KEY = "sk_ee1207b428511380b8ccf3cc96216cb71a00c4715e5a054b"
 
 // Helper function to get sample mapping based on voice and style
 async function getSampleMapping(voice: string, style: string): Promise<string> {
@@ -97,7 +101,7 @@ export async function generateAudio(params: any) {
       uploadedFileUrl
     } = params;
 
-    console.log(`[Server] Generating professional audio with Riffusion: "${prompt}", voice: ${voice}, style: ${style}, quality: ${quality}`)
+    console.log(`[Server] Generating professional audio with Stability AI: "${prompt}", voice: ${voice}, style: ${style}, quality: ${quality}`)
 
     if (hasUploadedFile) {
       console.log(`[Server] Processing uploaded file: ${uploadedFileName}`)
@@ -129,7 +133,7 @@ export async function generateAudio(params: any) {
           enhancedPrompt += ` (processing uploaded audio file: ${uploadedFileName})`;
         }
 
-        // Generate speech and music using Riffusion with quality parameter
+        // Generate speech and music using Stability AI with quality parameter
         const { speechUrl, musicUrl } = await generateSpeechWithMusic(
           enhancedPrompt,
           voice,
@@ -150,13 +154,13 @@ export async function generateAudio(params: any) {
           voice,
           style,
           quality,
-          isRiffusion: true,
+          isStabilityAI: true,
           qualityVerified: true,
           attempts,
           hasUploadedFile,
         };
       } catch (error) {
-        console.error(`Error in Riffusion API (attempt ${attempts}):`, error);
+        console.error(`Error in Stability AI API (attempt ${attempts}):`, error);
         lastError = error;
 
         // Only retry if this is a quality-related error, not an API failure
@@ -174,7 +178,7 @@ export async function generateAudio(params: any) {
       fallbackUrl: fallbackVoiceSample,
       fallbackMusicUrl: fallbackMusicSample,
       success: false,
-      error: lastError?.message || "Failed to generate professional-quality audio with Riffusion API",
+      error: lastError?.message || "Failed to generate professional-quality audio with Stability AI API",
       useFallback: true,
       attempts,
     };
@@ -196,7 +200,7 @@ export async function generateAudio(params: any) {
  * Generate professional-grade music using Riffusion API with quality assurance
  */
 export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
-  console.log(`[Server] Professional music generation requested with Riffusion: "${prompt}", genre: ${genre}, bpm: ${bpm}`)
+  console.log(`[Server] Professional music generation requested with Stability AI: "${prompt}", genre: ${genre}, bpm: ${bpm}`)
 
   // Fallback samples in case API fails
   const fallbackSamples = {
@@ -235,7 +239,7 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
         console.log(`Quality retry attempt ${attempts} with enhanced prompt`);
       }
 
-      // Generate music using Riffusion
+      // Generate music using Stability AI
       const musicUrl = await generateRemix(enhancedPrompt);
 
       // Verify the audio quality
@@ -251,7 +255,7 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
           success: true,
           genre,
           bpm,
-          isRiffusion: true,
+          isStabilityAI: true,
           qualityVerified: true,
           qualityScore: qualityResult.qualityScore,
           attempts,
@@ -270,7 +274,7 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
         lastError = new Error(`Music quality below professional standards: ${qualityResult.issues.join(", ")}`);
       }
     } catch (error) {
-      console.error(`Error in Riffusion music generation (attempt ${attempts}):`, error);
+      console.error(`Error in Stability AI music generation (attempt ${attempts}):`, error);
       lastError = error;
 
       // Only retry if this is a quality-related error, not an API failure
@@ -290,7 +294,7 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
       success: true,
       genre,
       bpm,
-      isRiffusion: true,
+      isStabilityAI: true,
       qualityVerified: false,
       qualityScore: bestQualityScore,
       attempts,
@@ -304,7 +308,7 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
     audioUrl: null,
     fallbackUrl,
     success: false,
-    error: lastError?.message || "Failed to generate professional-quality music with Riffusion",
+    error: lastError?.message || "Failed to generate professional-quality music with Stability AI",
     useFallback: true,
     attempts,
   };
@@ -322,7 +326,7 @@ export async function generateAudioWithBackgroundMusic(text: string, voice: stri
     const fallbackMusicSample = await getMusicFallback(emotion)
 
     try {
-      // Generate speech and music using Riffusion
+      // Generate speech and music using Stability AI
       const { speechUrl, musicUrl } = await generateSpeechWithMusic(text, voice, emotion)
 
       return {
@@ -331,10 +335,10 @@ export async function generateAudioWithBackgroundMusic(text: string, voice: stri
         fallbackVoiceUrl: fallbackVoiceSample,
         fallbackMusicUrl: fallbackMusicSample,
         success: true,
-        message: "Audio generated successfully with Riffusion",
+        message: "Audio generated successfully with Stability AI",
       }
     } catch (error) {
-      console.error("Error in Riffusion API:", error)
+      console.error("Error in Stability AI API:", error)
 
       // Return fallback samples if API fails
       return {
@@ -372,7 +376,7 @@ export async function generateMusicForMood(mood: string) {
   try {
     console.log(`Generating music for mood: ${mood}`)
 
-    // Generate music using Riffusion
+    // Generate music using Stability AI
     const musicUrl = await generateBackgroundMusic(mood)
 
     const fallbackUrl = await getMusicFallback(mood)
@@ -380,7 +384,7 @@ export async function generateMusicForMood(mood: string) {
       musicUrl,
       fallbackUrl,
       success: true,
-      message: "Music generated successfully with Riffusion",
+      message: "Music generated successfully with Stability AI",
     }
   } catch (error) {
     console.error("Error generating music:", error)
@@ -392,6 +396,116 @@ export async function generateMusicForMood(mood: string) {
       message: `Error generating music: ${error instanceof Error ? error.message : String(error)}`,
       useFallback: true,
     }
+  }
+}
+
+/**
+ * Generate a text-to-song track using UberDuck API
+ */
+export async function generateTextToSongTrack(paramsJson: string) {
+  try {
+    console.log(`Generating text-to-song with params: ${paramsJson}`);
+
+    // Parse parameters safely
+    let params;
+    try {
+      params = typeof paramsJson === 'string' ? JSON.parse(paramsJson) : paramsJson;
+    } catch (parseError) {
+      console.error("Error parsing text-to-song parameters:", parseError);
+      // If parsing fails, assume it's just a text string
+      params = { text: paramsJson };
+    }
+
+    // Extract parameters with defaults
+    const {
+      text = "",
+      voice = "auto",
+      genre = "hip-hop",
+      bpm = 90,
+      quality = "high",
+    } = params;
+
+    // Validate required parameters
+    if (!text || text.trim() === "") {
+      throw new Error("Song lyrics are required");
+    }
+
+    console.log(`Text-to-song parameters:`, {
+      text,
+      voice,
+      genre,
+      bpm,
+      quality
+    });
+
+    // Determine fallback URL based on genre
+    const fallbackUrl = await getFallbackUrl(genre);
+
+    // Generate the song
+    try {
+      const result = await generateTextToSong({
+        text,
+        voice,
+        genre,
+        bpm,
+        quality
+      });
+
+      if (result.audio_url) {
+        console.log(`Text-to-song generation successful!`);
+        return {
+          songUrl: result.audio_url,
+          fallbackUrl,
+          success: true,
+          message: `Song generated successfully with Text-to-Song API`,
+          duration: result.duration || 30,
+        };
+      }
+    } catch (error) {
+      console.error(`Error in text-to-song generation:`, error);
+
+      // Try with Stability AI as fallback
+      try {
+        console.log(`Trying fallback with Stability AI`);
+        const fallbackPrompt = `${genre} song with lyrics: ${text}, ${bpm} BPM, professional studio quality`;
+        const fallbackResult = await generateRemix(fallbackPrompt, {
+          genre,
+          bpm,
+          quality: "high",
+        });
+
+        if (fallbackResult) {
+          console.log(`Fallback song generation successful!`);
+          return {
+            songUrl: fallbackResult,
+            fallbackUrl,
+            success: true,
+            message: `Song generated successfully with fallback API`,
+          };
+        }
+      } catch (fallbackError) {
+        console.error(`Fallback song generation also failed:`, fallbackError);
+      }
+    }
+
+    // If all attempts failed, return fallback URL
+    console.warn(`Failed to generate song. Using fallback.`);
+    return {
+      songUrl: null,
+      fallbackUrl,
+      success: false,
+      message: "Failed to generate song. Using fallback audio.",
+      useFallback: true,
+    };
+  } catch (error) {
+    console.error("Error generating song:", error);
+    return {
+      songUrl: null,
+      fallbackUrl: "/samples/music-neutral.mp3",
+      success: false,
+      message: `Error generating song: ${error instanceof Error ? error.message : String(error)}`,
+      useFallback: true,
+    };
   }
 }
 
@@ -451,7 +565,7 @@ export async function generateRemixTrack(paramsJson: string) {
     const attemptQuality = useUltraFastMode ? "fast" : quality;
 
     try {
-      // Generate remix using Riffusion with optimized parameters
+      // Generate remix using Stability AI with optimized parameters
       const remixUrl = await generateRemix(description, {
         genre,
         bpm,
@@ -467,7 +581,7 @@ export async function generateRemixTrack(paramsJson: string) {
           remixUrl,
           fallbackUrl,
           success: true,
-          message: `Remix generated successfully with Riffusion (fast mode)`,
+          message: `Remix generated successfully with Stability AI (fast mode)`,
         };
       }
     } catch (error) {
@@ -490,7 +604,7 @@ export async function generateRemixTrack(paramsJson: string) {
             remixUrl: fallbackRemixUrl,
             fallbackUrl,
             success: true,
-            message: `Remix generated successfully with Riffusion (fallback mode)`,
+            message: `Remix generated successfully with Stability AI (fallback mode)`,
           };
         }
       } catch (fallbackError) {

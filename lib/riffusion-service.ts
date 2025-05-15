@@ -22,6 +22,7 @@ type RiffusionResponse = {
   audio_url: string
   seed: number
   image_url: string
+  duration?: number // Add duration for better audio player display
 }
 
 type TextToSpeechOptions = {
@@ -31,9 +32,9 @@ type TextToSpeechOptions = {
   quality?: string // low, medium, high
 }
 
-const RIFFUSION_API_KEY = "sk-ebfcc1a7d768b55f533eb6194e07f29b8c257373a7bdfcf634f937a0a5bba274"
-// Riffusion API URL for audio generation
-const RIFFUSION_API_URL = "https://api.riffusion.com/v1"
+const STABILITY_API_KEY = "sk-ebfcc1a7d768b55f533eb6194e07f29b8c257373a7bdfcf634f937a0a5bba274"
+// Stability AI API URL for audio generation
+const STABILITY_API_URL = "https://api.stability.ai/v2/generation/stable-audio"
 
 // Simple in-memory cache for remix results
 const remixCache: Record<string, string> = {}
@@ -48,22 +49,41 @@ export async function generateRiffusionAudio(options: RiffusionOptions): Promise
   // Function to make a single API call attempt
   const makeApiCall = async (attemptOptions: RiffusionOptions): Promise<RiffusionResponse> => {
     try {
+      // Default options optimized for high-quality audio generation with Stability AI v2 API
       const defaultOptions = {
-        negative_prompt: "low quality, noise, distortion, muffled, garbled, amateur, unprofessional, low fidelity",
-        denoising: 0.85, // Increased for cleaner output
-        guidance: 8.5, // Increased for better adherence to prompt
-        num_inference_steps: 75, // Increased for higher quality generation
-        width: 768, // Increased for better audio resolution
-        height: 768, // Increased for better audio resolution
-        alpha: 0.5,
-      }
+        seed: Math.floor(Math.random() * 1000000), // Random seed if not provided
+        audio_file_format: "mp3", // Use mp3 format for better compatibility
+        duration_in_seconds: 8, // 8 seconds of audio (can be 5-30 seconds)
+        generation_config: {
+          preset: attemptOptions.guidance_preset || "FAST", // Options: SIMPLE, FAST, DETAILED, NONE
+          model: "stable-audio-v2", // Use the latest model
+          steps: attemptOptions.num_inference_steps || 50, // Default for Stability AI
+          samples: 1, // Generate one sample
+        }
+      };
 
+      // Format text prompts for Stability AI v2 API
+      const prompt = attemptOptions.prompt;
+      const negative_prompt = attemptOptions.negative_prompt || "";
+
+      // Merge default options with provided options
       const requestOptions = {
         ...defaultOptions,
-        ...attemptOptions,
-      }
+        prompt: prompt,
+        negative_prompt: negative_prompt,
+        mode: attemptOptions.mode || "music", // Use music mode by default
+      };
 
-      console.log("Generating Riffusion audio with options:", JSON.stringify(requestOptions))
+      // Remove properties that aren't used by the API
+      delete requestOptions.prompt;
+      delete requestOptions.negative_prompt;
+      delete requestOptions.width;
+      delete requestOptions.height;
+      delete requestOptions.alpha;
+      delete requestOptions.interpolation_texts;
+      delete requestOptions.num_interpolation_steps;
+
+      console.log("Generating audio with options:", JSON.stringify(requestOptions))
 
       // Add retry logic for network issues
       let retries = 0;
@@ -72,15 +92,17 @@ export async function generateRiffusionAudio(options: RiffusionOptions): Promise
 
       while (retries < maxRetries) {
         try {
-          response = await fetch(`${RIFFUSION_API_URL}/images/generations`, {
+          // Use the correct Stability AI v2 endpoint for audio generation
+          response = await fetch(`${STABILITY_API_URL}`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${RIFFUSION_API_KEY}`,
+              "Accept": "application/json",
+              "Authorization": `Bearer ${STABILITY_API_KEY}`,
             },
             body: JSON.stringify(requestOptions),
             // Add timeout to prevent hanging requests
-            signal: AbortSignal.timeout(30000), // 30 second timeout
+            signal: AbortSignal.timeout(60000), // 60 second timeout for longer generations
           });
 
           // If successful, break out of retry loop
@@ -101,24 +123,115 @@ export async function generateRiffusionAudio(options: RiffusionOptions): Promise
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error("Riffusion API error:", errorText)
-        throw new Error(`Riffusion API error: ${response.status} ${response.statusText}`)
+        console.error("Stability AI API error:", errorText)
+
+        // Create a more detailed error message
+        let errorMessage = `Stability AI API error: ${response.status} ${response.statusText}`;
+        try {
+          // Try to parse the error response as JSON
+          const errorJson = JSON.parse(errorText);
+          if (errorJson.message) {
+            errorMessage += ` - ${errorJson.message}`;
+          }
+        } catch (e) {
+          // If parsing fails, just use the raw error text
+          if (errorText) {
+            errorMessage += ` - ${errorText}`;
+          }
+        }
+
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json()
+      const data = await response.json();
+      console.log("Stability AI response:", JSON.stringify(data).substring(0, 200) + "...");
 
-      if (data.data && data.data.length > 0) {
-        const generatedItem = data.data[0]
+      // Handle the Stability AI v2 response format
+      if (data.audio_file) {
+        // For v2 API, we get a direct audio file URL
+        const audioUrl = data.audio_file;
+
+        // Create an audio element to get the duration
+        const audio = new Audio();
+        audio.src = audioUrl;
+
+        // Wait for metadata to load to get duration
+        let duration = 30; // Default duration
+        try {
+          await new Promise((resolve) => {
+            const metadataLoaded = () => {
+              duration = audio.duration;
+              resolve(null);
+            };
+
+            audio.addEventListener('loadedmetadata', metadataLoaded);
+            audio.addEventListener('error', resolve); // Also resolve on error
+
+            // Set a timeout in case metadata loading takes too long
+            setTimeout(resolve, 5000);
+
+            audio.load();
+          });
+        } catch (e) {
+          console.warn("Error getting audio duration:", e);
+        }
+
+        console.log(`Generated audio duration: ${duration}s`);
+
         return {
-          audio_url: generatedItem.audio_url || "",
+          audio_url: audioUrl,
+          seed: data.seed || 0,
+          image_url: "", // No image in audio generation
+          duration: duration, // Use the measured duration or default
+        }
+      } else if (data.artifacts && data.artifacts.length > 0) {
+        // Fallback for v1 API format
+        const generatedItem = data.artifacts[0];
+
+        // Convert base64 audio to a blob URL for playback
+        const audioBase64 = generatedItem.base64;
+        const audioBlob = await fetch(`data:audio/mp3;base64,${audioBase64}`).then(r => r.blob());
+        const audioUrl = URL.createObjectURL(audioBlob);
+
+        // Store audio duration in the blob for better playback
+        const audio = new Audio();
+        audio.src = audioUrl;
+
+        // Wait for metadata to load to get duration
+        let duration = 30; // Default duration
+        try {
+          await new Promise((resolve) => {
+            const metadataLoaded = () => {
+              duration = audio.duration;
+              resolve(null);
+            };
+
+            audio.addEventListener('loadedmetadata', metadataLoaded);
+            audio.addEventListener('error', resolve); // Also resolve on error
+
+            // Set a timeout in case metadata loading takes too long
+            setTimeout(resolve, 5000);
+
+            audio.load();
+          });
+        } catch (e) {
+          console.warn("Error getting audio duration:", e);
+        }
+
+        console.log(`Generated audio duration: ${duration}s`);
+
+        return {
+          audio_url: audioUrl,
           seed: generatedItem.seed || 0,
-          image_url: generatedItem.url || "",
+          image_url: "", // No image in audio generation
+          duration: duration, // Use the measured duration or default
         }
       } else {
-        throw new Error("Unexpected response format from Riffusion API")
+        console.error("Unexpected Stability AI response format:", data);
+        throw new Error("Unexpected response format from Stability AI API")
       }
     } catch (error) {
-      console.error("Error in Riffusion API call:", error)
+      console.error("Error in API call:", error)
       throw error
     }
   };
@@ -173,7 +286,7 @@ export async function generateTextToSpeech(options: TextToSpeechOptions): Promis
   try {
     const { text, voice_type = "neutral", emotion = "neutral", quality = "high" } = options
 
-    // Create a prompt that instructs Riffusion to generate speech
+    // Create a prompt that instructs Stability AI to generate speech
     // We'll use specific prompts based on voice type and emotion to guide the generation
     let voicePrompt = ""
 
@@ -216,23 +329,23 @@ export async function generateTextToSpeech(options: TextToSpeechOptions): Promis
         emotionPrompt = "neutral tone"
     }
 
-    // Quality settings - enhanced for professional audio quality
+    // Quality settings - optimized for Stability AI
     const qualitySettings = {
       low: {
-        num_inference_steps: 40,
-        guidance: 7.0,
+        num_inference_steps: 30,
+        guidance_preset: "FAST",
       },
       medium: {
-        num_inference_steps: 60,
-        guidance: 8.0,
+        num_inference_steps: 40,
+        guidance_preset: "FAST",
       },
       high: {
-        num_inference_steps: 85, // Significantly increased for premium quality
-        guidance: 9.0, // Increased for better prompt adherence
+        num_inference_steps: 50,
+        guidance_preset: "DETAILED",
       },
-      professional: { // New premium tier for professional-grade audio
-        num_inference_steps: 100,
-        guidance: 9.5,
+      professional: { // Premium tier for professional-grade audio
+        num_inference_steps: 60,
+        guidance_preset: "DETAILED",
       },
     }
 
@@ -246,7 +359,9 @@ export async function generateTextToSpeech(options: TextToSpeechOptions): Promis
       prompt,
       negative_prompt: "music, instruments, low quality, noise, static, distortion, muffled, garbled, amateur recording, background noise, echo, reverb, clipping, low bitrate, compression artifacts, low sample rate",
       num_inference_steps: settings.num_inference_steps,
-      guidance: settings.guidance,
+      guidance_preset: settings.guidance_preset,
+      mode: "text-to-speech", // Use text-to-speech mode for Stability AI
+      duration: 15, // Longer duration for speech
     })
 
     return result.audio_url
@@ -268,8 +383,10 @@ export async function generateBackgroundMusic(mood: string, genre?: string): Pro
     const result = await generateRiffusionAudio({
       prompt,
       negative_prompt: "low quality, noise, distortion, amateur recording, clipping, low bitrate, compression artifacts, background noise, hiss, static",
-      num_inference_steps: 90, // Significantly increased for professional quality
-      guidance: 9.0, // Significantly increased for better adherence to prompt
+      num_inference_steps: 50, // Optimized for Stability AI
+      guidance_preset: "DETAILED", // Use detailed preset for better quality
+      mode: "music", // Use music mode for Stability AI
+      duration: 15, // 15 seconds of music
     })
 
     return result.audio_url
@@ -286,16 +403,18 @@ export async function transformAudio(audioUrl: string, transformPrompt: string):
   try {
     console.log(`Transforming audio with prompt: ${transformPrompt}`);
 
-    // Enhanced prompt for better audio transformation
+    // Enhanced prompt for better audio transformation with Stability AI
     const enhancedPrompt = `Transform this audio: ${transformPrompt}, professional studio quality, mastered audio, pristine clarity, audiophile quality, perfect mix, high fidelity, 48kHz sample rate, 24-bit depth`;
 
-    // For now, we'll generate new audio based on the prompt with higher quality settings
-    // In a real implementation, you would upload the audio to Riffusion and transform it
+    // Generate new audio based on the prompt with Stability AI
+    // Note: Stability AI doesn't support direct audio transformation, so we generate new audio
     const result = await generateRiffusionAudio({
       prompt: enhancedPrompt,
       negative_prompt: "low quality, noise, distortion, amateur recording, clipping, low bitrate, compression artifacts",
-      num_inference_steps: 90, // Higher quality for transformations
-      guidance: 9.0, // Higher guidance for better adherence to prompt
+      num_inference_steps: 50, // Optimized for Stability AI
+      guidance_preset: "DETAILED", // Use detailed preset for better quality
+      mode: "music", // Use music mode for Stability AI
+      duration: 15, // 15 seconds of audio
     });
 
     return result.audio_url;
@@ -335,28 +454,33 @@ export async function generateRemix(description: string, options: any = {}): Pro
       uploadedAudioUrl
     } = parsedOptions;
 
-    // Optimized quality settings for faster generation
+    // Quality settings optimized for Stability AI
     const qualitySettings = {
       low: {
-        num_inference_steps: 25,  // Reduced for faster generation
-        guidance: 6.5,
+        num_inference_steps: 25,
+        guidance_preset: "FAST",
+        duration: 8,
       },
       medium: {
-        num_inference_steps: 35,  // Reduced for faster generation
-        guidance: 7.0,
+        num_inference_steps: 35,
+        guidance_preset: "FAST",
+        duration: 10,
       },
       high: {
-        num_inference_steps: 50,  // Reduced for faster generation
-        guidance: 7.5,
+        num_inference_steps: 50,
+        guidance_preset: "DETAILED",
+        duration: 12,
       },
       professional: {
-        num_inference_steps: 70,  // Reduced for faster generation
-        guidance: 8.0,
+        num_inference_steps: 60,
+        guidance_preset: "DETAILED",
+        duration: 15,
       },
-      // New ultra-fast option
+      // Ultra-fast option
       fast: {
         num_inference_steps: 20,
-        guidance: 6.0,
+        guidance_preset: "FAST",
+        duration: 8,
       }
     };
 
@@ -394,20 +518,23 @@ export async function generateRemix(description: string, options: any = {}): Pro
     while (attempts < maxAttempts) {
       attempts++;
       try {
-        // Use fast settings on first attempt
+        // Use optimized settings for Stability AI
         const attemptSettings = { ...settings };
         if (attempts > 1) {
           // Use even faster settings on retry
           attemptSettings.num_inference_steps = Math.min(25, settings.num_inference_steps);
-          attemptSettings.guidance = Math.min(6.5, settings.guidance);
+          attemptSettings.guidance_preset = "FAST"; // Always use FAST preset for retries
+          attemptSettings.duration = Math.min(8, settings.duration); // Shorter duration for faster generation
           console.log(`Fast retry attempt ${attempts} with settings:`, attemptSettings);
         }
 
         const result = await generateRiffusionAudio({
           prompt: enhancedPrompt,
-          negative_prompt: "low quality", // Simplified negative prompt
+          negative_prompt: "low quality, noise, distortion, amateur recording", // Enhanced negative prompt
           num_inference_steps: attemptSettings.num_inference_steps,
-          guidance: attemptSettings.guidance,
+          guidance_preset: attemptSettings.guidance_preset,
+          duration: attemptSettings.duration,
+          mode: "music", // Use music mode for remixes
           seed: seed ? parseInt(String(seed)) : undefined,
         });
 

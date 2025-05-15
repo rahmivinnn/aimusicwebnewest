@@ -570,6 +570,74 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* New Feature Cards */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 mt-8">
+        <div className="remix-card bg-gradient-to-br from-red-900/20 to-black p-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="mb-2 text-2xl font-bold text-red-400">Love Song Creator</h2>
+              <p className="mb-6 text-zinc-400">
+                Create beautiful love songs with AI-powered lyrics and melodies. Perfect for special occasions!
+              </p>
+              <Link href="/text-to-audio?tab=song&preset=love">
+                <Button className="bg-red-600 hover:bg-red-700">
+                  <Heart className="mr-2 h-4 w-4" />
+                  Create Love Song
+                </Button>
+              </Link>
+
+              <div className="mt-4 p-3 bg-black/30 rounded-lg border border-red-900/30">
+                <h3 className="text-sm font-medium text-red-400 mb-2">Romantic Song Features</h3>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-2 py-1 bg-red-900/30 text-xs rounded-full text-red-300">Emotional Melodies</span>
+                  <span className="px-2 py-1 bg-red-900/30 text-xs rounded-full text-red-300">Romantic Lyrics</span>
+                  <span className="px-2 py-1 bg-red-900/30 text-xs rounded-full text-red-300">Heartfelt Vocals</span>
+                  <span className="px-2 py-1 bg-red-900/30 text-xs rounded-full text-red-300">Custom Dedications</span>
+                </div>
+              </div>
+            </div>
+            <div className="ml-4 flex-shrink-0">
+              <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M40 65C40 65 60 50 60 30C60 22.5 55 15 45 15C40 15 40 20 40 20C40 20 40 15 35 15C25 15 20 22.5 20 30C20 50 40 65 40 65Z" fill="#ff6b6b" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="remix-card bg-gradient-to-br from-amber-900/20 to-black p-6">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="mb-2 text-2xl font-bold text-amber-400">Adventure Song Creator</h2>
+              <p className="mb-6 text-zinc-400">
+                Generate epic adventure songs with thrilling melodies and exciting lyrics for your next journey!
+              </p>
+              <Link href="/text-to-audio?tab=song&preset=adventure">
+                <Button className="bg-amber-600 hover:bg-amber-700">
+                  <Compass className="mr-2 h-4 w-4" />
+                  Create Adventure Song
+                </Button>
+              </Link>
+
+              <div className="mt-4 p-3 bg-black/30 rounded-lg border border-amber-900/30">
+                <h3 className="text-sm font-medium text-amber-400 mb-2">Epic Adventure Features</h3>
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-2 py-1 bg-amber-900/30 text-xs rounded-full text-amber-300">Epic Orchestration</span>
+                  <span className="px-2 py-1 bg-amber-900/30 text-xs rounded-full text-amber-300">Heroic Themes</span>
+                  <span className="px-2 py-1 bg-amber-900/30 text-xs rounded-full text-amber-300">Dynamic Percussion</span>
+                  <span className="px-2 py-1 bg-amber-900/30 text-xs rounded-full text-amber-300">Cinematic Quality</span>
+                </div>
+              </div>
+            </div>
+            <div className="ml-4 flex-shrink-0">
+              <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="40" cy="40" r="25" stroke="#ffc107" stroke-width="4" />
+                <path d="M40 15L40 25M40 55L40 65M65 40L55 40M25 40L15 40M57 23L50 30M30 50L23 57M57 57L50 50M30 30L23 23" stroke="#ffc107" stroke-width="4" stroke-linecap="round" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* New AIVA Integration Banner */}
       <div className="mt-8 mb-8 rounded-xl border border-cyan-800/30 bg-gradient-to-r from-cyan-900/20 to-black/60 p-6">
         <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">

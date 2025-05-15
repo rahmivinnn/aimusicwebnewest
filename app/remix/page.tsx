@@ -824,7 +824,7 @@ export default function RemixPage() {
                 </div>
 
                 {useEmbeddedPlayer ? (
-                  // Embedded audio player with preload to ensure time display works
+                  // Enhanced embedded audio player with professional features
                   <div className="mt-4 p-4 bg-slate-50 rounded-md">
                     <audio
                       src={remixUrl}
@@ -837,23 +837,60 @@ export default function RemixPage() {
                         // Force metadata to load properly
                         const audio = e.currentTarget;
                         if (audio.duration === Infinity || isNaN(audio.duration)) {
+                          // Force duration calculation for problematic browsers
                           audio.currentTime = 1e101;
                           setTimeout(() => {
                             audio.currentTime = 0;
                           }, 100);
                         }
                         console.log("Audio metadata loaded, duration:", audio.duration);
+
+                        // If duration is still invalid after forcing calculation, try to reload
+                        setTimeout(() => {
+                          if (audio.duration === Infinity || isNaN(audio.duration)) {
+                            console.log("Duration still invalid, reloading audio");
+                            const currentSrc = audio.src;
+                            audio.src = "";
+                            setTimeout(() => {
+                              audio.src = currentSrc;
+                              audio.load();
+                            }, 100);
+                          }
+                        }, 500);
+                      }}
+                      onDurationChange={(e) => {
+                        // Additional event to catch duration changes
+                        console.log("Duration changed:", e.currentTarget.duration);
                       }}
                       onCanPlay={() => {
                         console.log("Audio can play now");
+                        // Force a redraw of the audio element to update the UI
+                        const container = document.querySelector(".mt-4.p-4.bg-slate-50.rounded-md");
+                        if (container) {
+                          container.classList.add("audio-ready");
+                        }
                       }}
                       onError={(e) => {
                         console.error("Audio error:", e);
-                        // Try to reload with a different source if there's an error
+                        // Enhanced error handling with multiple fallback attempts
                         const audio = e.currentTarget;
-                        if (audio.src === remixUrl && remixUrl.includes("api")) {
-                          console.log("Error with API URL, trying fallback");
-                          audio.src = getFallbackUrl(genre);
+
+                        // Try to reload with a different source if there's an error
+                        if (audio.src === remixUrl) {
+                          if (remixUrl.includes("blob:")) {
+                            // For blob URLs, try a direct fallback
+                            console.log("Error with blob URL, trying fallback");
+                            audio.src = getFallbackUrl(genre);
+                          } else if (remixUrl.includes("api")) {
+                            // For API URLs, try a fallback
+                            console.log("Error with API URL, trying fallback");
+                            audio.src = getFallbackUrl(genre);
+                          } else {
+                            // For other URLs, try the EDM fallback
+                            console.log("Error with URL, trying EDM fallback");
+                            audio.src = "/samples/edm-remix-sample.mp3";
+                          }
+                          audio.load();
                         }
                       }}
                       onPlay={() => setIsPlaying(true)}

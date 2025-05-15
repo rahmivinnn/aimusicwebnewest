@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="120" height="72" viewBox="0 0 120 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Prism shape -->
+  <path d="M60 10L20 60H100L60 10Z" fill="url(#prism-gradient)" />
+  
+  <!-- Light beam -->
+  <path d="M60 10L40 60H80L60 10Z" fill="url(#light-gradient)" opacity="0.8" />
+  
+  <!-- Text -->
+  <text x="60" y="65" font-family="Arial, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#FFFFFF">COMPOSITION CONVERTER</text>
+  
+  <!-- Gradients -->
+  <defs>
+    <linearGradient id="prism-gradient" x1="20" y1="10" x2="100" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00E9C0" />
+      <stop offset="0.5" stop-color="#00A0E9" />
+      <stop offset="1" stop-color="#7B5AE0" />
+    </linearGradient>
+    <linearGradient id="light-gradient" x1="40" y1="10" x2="80" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" />
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+</svg>

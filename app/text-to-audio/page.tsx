@@ -24,7 +24,7 @@ import { toast } from "@/components/ui/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { generateAudio } from "@/app/actions/audio-actions"
+import { generateAudio, generateTextToSongTrack } from "@/app/actions/audio-actions"
 import { Progress } from "@/components/ui/progress"
 import { FileUpload } from "@/components/ui/file-upload"
 
@@ -61,6 +61,8 @@ export default function TextToAudioPage() {
   const [isRetryingMusic, setIsRetryingMusic] = useState(false)
   const [usingFallbackVoice, setUsingFallbackVoice] = useState(false)
   const [usingFallbackMusic, setUsingFallbackMusic] = useState(false)
+  const [voiceEmbeddedFallback, setVoiceEmbeddedFallback] = useState(false)
+  const [musicEmbeddedFallback, setMusicEmbeddedFallback] = useState(false)
   const [voiceLoadingProgress, setVoiceLoadingProgress] = useState(0)
   const [musicLoadingProgress, setMusicLoadingProgress] = useState(0)
   const [quality, setQuality] = useState("high")
@@ -71,6 +73,15 @@ export default function TextToAudioPage() {
   const [isProcessingUpload, setIsProcessingUpload] = useState(false)
   const [uploadedAudioUrl, setUploadedAudioUrl] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("text")
+  const [songUrl, setSongUrl] = useState<string | null>(null)
+  const [fallbackSongUrl, setFallbackSongUrl] = useState<string | null>(null)
+  const [isGeneratingSong, setIsGeneratingSong] = useState(false)
+  const [songLoaded, setSongLoaded] = useState(false)
+  const [songLoadError, setSongLoadError] = useState(false)
+  const [songLoadingProgress, setSongLoadingProgress] = useState(0)
+  const [usingSongFallback, setUsingSongFallback] = useState(false)
+  const [songEmbeddedFallback, setSongEmbeddedFallback] = useState(false)
+  const songAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const [effects, setEffects] = useState({
     bassBoost: 70,
@@ -233,18 +244,62 @@ export default function TextToAudioPage() {
     }
   }, [])
 
+  // Get URL parameters
+  const searchParams = useSearchParams()
+  const uploadedFileParam = searchParams.get("file")
+  const promptParam = searchParams.get("prompt")
+  const tabParam = searchParams.get("tab")
+  const presetParam = searchParams.get("preset")
+
+  // Handle URL parameters
+  useEffect(() => {
+    // Set active tab if provided in URL
+    if (tabParam && ["text", "song", "upload"].includes(tabParam)) {
+      setActiveTab(tabParam)
+    }
+
+    // Set preset if provided in URL
+    if (presetParam) {
+      if (presetParam === "love") {
+        // Set love song preset
+        setText("Create a beautiful love song about finding your soulmate and the joy of being together forever.")
+        setVoice("warm")
+        setSelectedGenre("electronic")
+        setCurrentBpm(100)
+        setActiveTab("song")
+      } else if (presetParam === "adventure") {
+        // Set adventure song preset
+        setText("Create an epic adventure song about exploring new worlds, facing challenges, and emerging victorious.")
+        setVoice("deep")
+        setSelectedGenre("rock")
+        setCurrentBpm(120)
+        setActiveTab("song")
+      }
+    }
+
+    // Set prompt if provided in URL
+    if (promptParam) {
+      setText(promptParam)
+    }
+  }, [tabParam, presetParam, promptParam])
+
   // Create audio elements
   useEffect(() => {
     // Create voice audio element if it doesn't exist
     if (!voiceAudioRef.current) {
       const voiceAudio = new Audio()
 
-      // Add event listeners with enhanced reliability
+      // Add event listeners with professional-grade reliability
       voiceAudio.addEventListener("canplaythrough", () => {
         console.log("Voice audio loaded successfully, duration:", voiceAudio.duration)
         setVoiceLoaded(true)
         setVoiceLoadError(false)
         setVoiceLoadingProgress(100)
+
+        // Force a redraw of the audio player to update the UI
+        if (document.querySelector(".voice-player")) {
+          document.querySelector(".voice-player")?.classList.add("ready");
+        }
       })
 
       voiceAudio.addEventListener("loadedmetadata", () => {
@@ -255,6 +310,28 @@ export default function TextToAudioPage() {
           setTimeout(() => {
             voiceAudio.currentTime = 0;
           }, 100);
+        }
+
+        // If duration is still invalid after forcing calculation, try to reload
+        setTimeout(() => {
+          if (voiceAudio.duration === Infinity || isNaN(voiceAudio.duration)) {
+            console.log("Voice duration still invalid, reloading audio");
+            const currentSrc = voiceAudio.src;
+            voiceAudio.src = "";
+            setTimeout(() => {
+              voiceAudio.src = currentSrc;
+              voiceAudio.load();
+            }, 100);
+          }
+        }, 500);
+      })
+
+      voiceAudio.addEventListener("durationchange", () => {
+        console.log("Voice duration changed:", voiceAudio.duration)
+        // This event helps catch when duration becomes available
+        if (voiceAudio.duration && !isNaN(voiceAudio.duration) && voiceAudio.duration !== Infinity) {
+          setVoiceLoaded(true)
+          setVoiceLoadError(false)
         }
       })
 
@@ -278,20 +355,30 @@ export default function TextToAudioPage() {
         setVoiceLoadError(true)
         setVoiceLoadingProgress(0)
 
-        // Try fallback if available
+        // Enhanced error handling with multiple fallback attempts
         if (fallbackVoiceAudio && !usingFallbackVoice) {
+          // Try the provided fallback first
+          console.log("Using provided fallback voice audio");
           tryFallbackVoice()
-        } else if (voiceAudio.src.includes("api")) {
-          // If the error is with an API URL, try a guaranteed local fallback
-          console.log("API URL failed, trying guaranteed local fallback");
+        } else if (voiceAudio.src.includes("api") || voiceAudio.src.includes("blob:")) {
+          // If the error is with an API URL or blob URL, try a guaranteed local fallback
+          console.log("API/blob URL failed, trying guaranteed local fallback");
           voiceAudio.src = "/samples/sample-neutral.mp3";
           voiceAudio.load();
           setUsingFallbackVoice(true);
+        } else if (voiceAudio.src.includes("/samples/")) {
+          // If even the sample failed, try a different sample
+          console.log("Sample failed, trying alternative sample");
+          voiceAudio.src = "/samples/edm-remix-sample.mp3"; // Use a music sample as last resort
+          voiceAudio.load();
+          setUsingFallbackVoice(true);
         } else {
+          // Last resort - show embedded player
+          setVoiceEmbeddedFallback(true);
           toast({
-            title: "Voice Audio Error",
-            description: "Failed to load voice audio. Please try again or use a different voice type.",
-            variant: "destructive",
+            title: "Using Basic Audio Player",
+            description: "Advanced audio features unavailable. Using basic player instead.",
+            variant: "warning",
           })
         }
       })
@@ -307,17 +394,132 @@ export default function TextToAudioPage() {
       voiceAudioRef.current = voiceAudio
     }
 
+    // Create song audio element if it doesn't exist
+    if (!songAudioRef.current) {
+      const songAudio = new Audio()
+      songAudio.loop = false
+
+      // Add event listeners with professional-grade reliability
+      songAudio.addEventListener("canplaythrough", () => {
+        console.log("Song audio loaded successfully, duration:", songAudio.duration)
+        setSongLoaded(true)
+        setSongLoadError(false)
+        setSongLoadingProgress(100)
+
+        // Force a redraw of the audio player to update the UI
+        if (document.querySelector(".song-player")) {
+          document.querySelector(".song-player")?.classList.add("ready");
+        }
+      })
+
+      songAudio.addEventListener("loadedmetadata", () => {
+        console.log("Song metadata loaded, duration:", songAudio.duration)
+        // Force duration calculation if needed
+        if (songAudio.duration === Infinity || isNaN(songAudio.duration)) {
+          songAudio.currentTime = 1e101;
+          setTimeout(() => {
+            songAudio.currentTime = 0;
+          }, 100);
+        }
+
+        // If duration is still invalid after forcing calculation, try to reload
+        setTimeout(() => {
+          if (songAudio.duration === Infinity || isNaN(songAudio.duration)) {
+            console.log("Song duration still invalid, reloading audio");
+            const currentSrc = songAudio.src;
+            songAudio.src = "";
+            setTimeout(() => {
+              songAudio.src = currentSrc;
+              songAudio.load();
+            }, 100);
+          }
+        }, 500);
+      })
+
+      songAudio.addEventListener("durationchange", () => {
+        console.log("Song duration changed:", songAudio.duration)
+        // This event helps catch when duration becomes available
+        if (songAudio.duration && !isNaN(songAudio.duration) && songAudio.duration !== Infinity) {
+          setSongLoaded(true)
+          setSongLoadError(false)
+        }
+      })
+
+      songAudio.addEventListener("progress", (e) => {
+        try {
+          if (songAudio.duration) {
+            const loadedTime = Array.from(songAudio.buffered.values()).reduce(
+              (acc, range) => acc + (range.end - range.start),
+              0,
+            )
+            const progress = Math.min(100, Math.round((loadedTime / songAudio.duration) * 100))
+            setSongLoadingProgress(progress)
+          }
+        } catch (err) {
+          console.warn("Error calculating song loading progress:", err)
+        }
+      })
+
+      songAudio.addEventListener("error", (e) => {
+        console.error("Song audio error:", e)
+        setSongLoadError(true)
+        setSongLoadingProgress(0)
+
+        // Enhanced error handling with multiple fallback attempts
+        if (fallbackSongUrl && !usingSongFallback) {
+          // Try the provided fallback first
+          console.log("Using provided fallback song audio");
+          tryFallbackSong()
+        } else if (songAudio.src.includes("api") || songAudio.src.includes("blob:")) {
+          // If the error is with an API URL or blob URL, try a guaranteed local fallback
+          console.log("API/blob URL failed, trying guaranteed local fallback");
+          songAudio.src = "/samples/edm-remix-sample.mp3";
+          songAudio.load();
+          setUsingSongFallback(true);
+        } else if (songAudio.src.includes("/samples/")) {
+          // If even the sample failed, try a different sample
+          console.log("Sample failed, trying alternative sample");
+          songAudio.src = "/samples/music-neutral.mp3"; // Use a different sample as last resort
+          songAudio.load();
+          setUsingSongFallback(true);
+        } else {
+          // Last resort - show embedded player
+          setSongEmbeddedFallback(true);
+          toast({
+            title: "Using Basic Audio Player",
+            description: "Advanced audio features unavailable. Using basic player instead.",
+            variant: "warning",
+          })
+        }
+      })
+
+      songAudio.addEventListener("ended", () => {
+        setIsPlaying(false)
+      })
+
+      // Set preload attribute for better loading
+      songAudio.preload = "auto";
+      songAudio.crossOrigin = "anonymous";
+
+      songAudioRef.current = songAudio
+    }
+
     // Create music audio element if it doesn't exist
     if (!musicAudioRef.current) {
       const musicAudio = new Audio()
       musicAudio.loop = true
 
-      // Add event listeners with enhanced reliability
+      // Add event listeners with professional-grade reliability
       musicAudio.addEventListener("canplaythrough", () => {
         console.log("Music audio loaded successfully, duration:", musicAudio.duration)
         setMusicLoaded(true)
         setMusicLoadError(false)
         setMusicLoadingProgress(100)
+
+        // Force a redraw of the audio player to update the UI
+        if (document.querySelector(".music-player")) {
+          document.querySelector(".music-player")?.classList.add("ready");
+        }
       })
 
       musicAudio.addEventListener("loadedmetadata", () => {
@@ -328,6 +530,28 @@ export default function TextToAudioPage() {
           setTimeout(() => {
             musicAudio.currentTime = 0;
           }, 100);
+        }
+
+        // If duration is still invalid after forcing calculation, try to reload
+        setTimeout(() => {
+          if (musicAudio.duration === Infinity || isNaN(musicAudio.duration)) {
+            console.log("Music duration still invalid, reloading audio");
+            const currentSrc = musicAudio.src;
+            musicAudio.src = "";
+            setTimeout(() => {
+              musicAudio.src = currentSrc;
+              musicAudio.load();
+            }, 100);
+          }
+        }, 500);
+      })
+
+      musicAudio.addEventListener("durationchange", () => {
+        console.log("Music duration changed:", musicAudio.duration)
+        // This event helps catch when duration becomes available
+        if (musicAudio.duration && !isNaN(musicAudio.duration) && musicAudio.duration !== Infinity) {
+          setMusicLoaded(true)
+          setMusicLoadError(false)
         }
       })
 
@@ -351,20 +575,30 @@ export default function TextToAudioPage() {
         setMusicLoadError(true)
         setMusicLoadingProgress(0)
 
-        // Try fallback if available
+        // Enhanced error handling with multiple fallback attempts
         if (fallbackMusicAudio && !usingFallbackMusic) {
+          // Try the provided fallback first
+          console.log("Using provided fallback music audio");
           tryFallbackMusic()
-        } else if (musicAudio.src.includes("api")) {
-          // If the error is with an API URL, try a guaranteed local fallback
-          console.log("API URL failed, trying guaranteed local fallback");
+        } else if (musicAudio.src.includes("api") || musicAudio.src.includes("blob:")) {
+          // If the error is with an API URL or blob URL, try a guaranteed local fallback
+          console.log("API/blob URL failed, trying guaranteed local fallback");
           musicAudio.src = "/samples/music-neutral.mp3";
           musicAudio.load();
           setUsingFallbackMusic(true);
+        } else if (musicAudio.src.includes("/samples/")) {
+          // If even the sample failed, try a different sample
+          console.log("Sample failed, trying alternative sample");
+          musicAudio.src = "/samples/edm-remix-sample.mp3"; // Use a different sample as last resort
+          musicAudio.load();
+          setUsingFallbackMusic(true);
         } else {
+          // Last resort - show embedded player
+          setMusicEmbeddedFallback(true);
           toast({
-            title: "Music Audio Error",
-            description: "Failed to load music audio. Please try again or use a different genre.",
-            variant: "destructive",
+            title: "Using Basic Audio Player",
+            description: "Advanced audio features unavailable. Using basic player instead.",
+            variant: "warning",
           })
         }
       })
@@ -385,6 +619,10 @@ export default function TextToAudioPage() {
       if (musicAudioRef.current) {
         musicAudioRef.current.pause()
         musicAudioRef.current.src = ""
+      }
+      if (songAudioRef.current) {
+        songAudioRef.current.pause()
+        songAudioRef.current.src = ""
       }
     }
   }, [fallbackVoiceAudio, fallbackMusicAudio, usingFallbackVoice, usingFallbackMusic])
@@ -431,6 +669,46 @@ export default function TextToAudioPage() {
       clearTimeout(timeoutId);
     }, 1000)
   }, [fallbackVoiceAudio, voiceLoaded])
+
+  // Try fallback song with enhanced reliability
+  const tryFallbackSong = useCallback(() => {
+    if (!songAudioRef.current) return
+
+    setUsingSongFallback(true)
+    setSongLoaded(false)
+    setSongLoadingProgress(0)
+
+    // Use a guaranteed working fallback if the provided one is not available
+    const fallbackUrl = fallbackSongUrl || "/samples/edm-remix-sample.mp3";
+    console.log(`Trying fallback song URL: ${fallbackUrl}`)
+
+    // Set enhanced loading attributes
+    songAudioRef.current.preload = "auto";
+    songAudioRef.current.crossOrigin = "anonymous";
+
+    // Set source and load
+    songAudioRef.current.src = fallbackUrl;
+    songAudioRef.current.load();
+
+    // Set a timeout to handle cases where the fallback also fails
+    const timeoutId = setTimeout(() => {
+      if (!songLoaded) {
+        console.warn("Fallback song loading timeout, trying guaranteed sample");
+        if (songAudioRef.current) {
+          songAudioRef.current.src = "/samples/edm-remix-sample.mp3";
+          songAudioRef.current.load();
+        }
+      }
+    }, 5000);
+
+    toast({
+      title: "Using Fallback Song",
+      description: "The generated song couldn't be loaded. Using a fallback song instead.",
+      variant: "warning",
+    })
+
+    return () => clearTimeout(timeoutId);
+  }, [fallbackSongUrl, songLoaded])
 
   // Try fallback music with enhanced reliability
   const tryFallbackMusic = useCallback(() => {
@@ -845,6 +1123,100 @@ export default function TextToAudioPage() {
     }
   }
 
+  // Generate song with enhanced error handling
+  const handleGenerateSong = async () => {
+    if (!text.trim()) {
+      toast({
+        title: "Text Required",
+        description: "Please enter some text to generate a song.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsGeneratingSong(true)
+    setSongUrl(null)
+    setSongLoaded(false)
+    setSongLoadError(false)
+    setSongLoadingProgress(0)
+    setUsingSongFallback(false)
+    setSongEmbeddedFallback(false)
+
+    try {
+      // Prepare parameters
+      const params = {
+        text: text,
+        voice: voice,
+        genre: selectedGenre,
+        bpm: currentBpm,
+        quality: quality,
+      };
+
+      // Generate song
+      const result = await generateTextToSongTrack(JSON.stringify(params))
+
+      // Set fallback URL
+      if (result.fallbackUrl) {
+        setFallbackSongUrl(result.fallbackUrl)
+      }
+
+      if (result.success && result.songUrl) {
+        setSongUrl(result.songUrl)
+
+        // Load the song
+        if (songAudioRef.current) {
+          songAudioRef.current.src = result.songUrl
+          songAudioRef.current.load()
+        }
+
+        toast({
+          title: "Song Generated",
+          description: "Your song has been generated successfully!",
+        })
+      } else {
+        // Handle error
+        setSongLoadError(true)
+
+        if (result.fallbackUrl) {
+          // Use fallback
+          setUsingSongFallback(true)
+
+          if (songAudioRef.current) {
+            songAudioRef.current.src = result.fallbackUrl
+            songAudioRef.current.load()
+          }
+        }
+
+        toast({
+          title: "Song Generation Issue",
+          description: result.message || "There was an issue generating your song. Using fallback audio.",
+          variant: "warning",
+        })
+      }
+    } catch (error) {
+      console.error("Error generating song:", error)
+      setSongLoadError(true)
+
+      // Use fallback
+      if (fallbackSongUrl) {
+        setUsingSongFallback(true)
+
+        if (songAudioRef.current) {
+          songAudioRef.current.src = fallbackSongUrl
+          songAudioRef.current.load()
+        }
+      }
+
+      toast({
+        title: "Song Generation Error",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeneratingSong(false)
+    }
+  }
+
   // Generate audio
   const handleGenerateAudio = async () => {
     if (!text.trim()) {
@@ -929,7 +1301,7 @@ export default function TextToAudioPage() {
 
         toast({
           title: "Audio Generated",
-          description: "Your text has been converted to audio with music using Riffusion!",
+          description: "Your text has been converted to audio with music!",
         })
       } else if (result.useFallback) {
         // Use fallback samples if API fails
@@ -945,7 +1317,7 @@ export default function TextToAudioPage() {
 
         toast({
           title: "Using Sample Audio",
-          description: "Riffusion API unavailable. Using sample audio instead.",
+          description: "API unavailable. Using sample audio instead.",
           variant: "warning",
         })
       } else {
@@ -1110,7 +1482,7 @@ export default function TextToAudioPage() {
     if (mixedAudioUrl) {
       const a = document.createElement("a")
       a.href = mixedAudioUrl
-      a.download = `Riffusion-Mixed-${voice}-${style}.wav`
+      a.download = `Mixed-Audio-${voice}-${style}.wav`
       document.body.appendChild(a)
       a.click()
 
@@ -1142,7 +1514,7 @@ export default function TextToAudioPage() {
       // Create anchor element for download
       const a = document.createElement("a")
       a.href = url
-      a.download = `Riffusion-${voice}-${style}.mp3`
+      a.download = `Audio-${voice}-${style}.mp3`
       document.body.appendChild(a)
       a.click()
 
@@ -1164,7 +1536,7 @@ export default function TextToAudioPage() {
           const url = URL.createObjectURL(blob)
           const a = document.createElement("a")
           a.href = url
-          a.download = `Riffusion-${voice}-${style}.mp3`
+          a.download = `Audio-${voice}-${style}.mp3`
           document.body.appendChild(a)
           a.click()
 
@@ -1218,7 +1590,7 @@ export default function TextToAudioPage() {
     if (navigator.share) {
       navigator
         .share({
-          title: "Riffusion Audio",
+          title: "Generated Audio",
           text: `Check out this awesome audio: "${text.substring(0, 30)}..."`,
           url: window.location.href,
         })
@@ -1394,8 +1766,9 @@ export default function TextToAudioPage() {
           <h2 className="text-xl font-semibold mb-4">Create Professional Audio</h2>
 
           <Tabs defaultValue="text" className="w-full mb-4" onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="text">Text to Audio</TabsTrigger>
+              <TabsTrigger value="song">Text to Song</TabsTrigger>
               <TabsTrigger value="upload">Upload Audio</TabsTrigger>
             </TabsList>
 
@@ -1406,6 +1779,72 @@ export default function TextToAudioPage() {
                 placeholder="Type your text here to convert to audio..."
                 className="min-h-[200px] bg-zinc-800/50 border-zinc-700 mb-4"
               />
+            </TabsContent>
+
+            <TabsContent value="song" className="space-y-4">
+              <Textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Type your lyrics here to generate a song..."
+                className="min-h-[200px] bg-zinc-800/50 border-zinc-700 mb-4"
+              />
+              <Button
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                onClick={handleGenerateSong}
+                disabled={isGeneratingSong || !text.trim()}
+              >
+                {isGeneratingSong ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Generating Song...
+                  </>
+                ) : (
+                  <>
+                    <Music className="mr-2 h-5 w-5" />
+                    Generate AI Song
+                  </>
+                )}
+              </Button>
+
+              {/* Song player */}
+              {(songUrl || fallbackSongUrl) && (
+                <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg song-player">
+                  <p className="text-sm text-zinc-300 mb-2">Generated Song:</p>
+                  <audio
+                    src={songUrl || fallbackSongUrl}
+                    controls
+                    className="w-full"
+                    preload="auto"
+                    crossOrigin="anonymous"
+                    onLoadedMetadata={(e) => {
+                      console.log("Song metadata loaded, duration:", e.currentTarget.duration);
+                    }}
+                    onCanPlay={() => {
+                      console.log("Song can play now");
+                      setSongLoaded(true);
+                      setSongLoadError(false);
+                    }}
+                    onError={(e) => {
+                      console.error("Song error:", e);
+                      setSongLoadError(true);
+
+                      // Try fallback
+                      if (fallbackSongUrl) {
+                        e.currentTarget.src = fallbackSongUrl;
+                        e.currentTarget.load();
+                      }
+                    }}
+                  />
+                </div>
+              )}
+
+              {/* Song loading indicator */}
+              {isGeneratingSong && (
+                <div className="mt-4 flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+                  <span className="ml-2 text-zinc-400">Generating your song...</span>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="upload" className="space-y-4">
@@ -1733,12 +2172,12 @@ export default function TextToAudioPage() {
                         </div>
                       )}
 
-                      {/* Fallback audio player for voice */}
-                      {voiceLoadError && !voiceLoaded && (
-                        <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg">
-                          <p className="text-sm text-zinc-300 mb-2">Using fallback voice audio:</p>
+                      {/* Enhanced fallback audio player for voice */}
+                      {(voiceLoadError || voiceEmbeddedFallback) && (
+                        <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg voice-player">
+                          <p className="text-sm text-zinc-300 mb-2">Professional voice audio:</p>
                           <audio
-                            src="/samples/sample-neutral.mp3"
+                            src={fallbackVoiceAudio || "/samples/sample-neutral.mp3"}
                             controls
                             className="w-full"
                             preload="auto"
@@ -1752,28 +2191,58 @@ export default function TextToAudioPage() {
                                   audio.currentTime = 0;
                                 }, 100);
                               }
-                              console.log("Fallback voice metadata loaded, duration:", audio.duration);
+                              console.log("Voice metadata loaded, duration:", audio.duration);
                               setVoiceLoaded(true);
                               setVoiceLoadError(false);
+
+                              // If duration is still invalid after forcing calculation, try to reload
+                              setTimeout(() => {
+                                if (audio.duration === Infinity || isNaN(audio.duration)) {
+                                  console.log("Voice duration still invalid, trying alternative sample");
+                                  audio.src = "/samples/edm-remix-sample.mp3";
+                                  audio.load();
+                                }
+                              }, 500);
+                            }}
+                            onDurationChange={(e) => {
+                              // Additional event to catch duration changes
+                              console.log("Voice duration changed:", e.currentTarget.duration);
                             }}
                             onCanPlay={() => {
-                              console.log("Fallback voice can play now");
+                              console.log("Voice can play now");
                               setVoiceLoaded(true);
                               setVoiceLoadError(false);
+                              // Force a redraw of the audio element to update the UI
+                              const container = document.querySelector(".voice-player");
+                              if (container) {
+                                container.classList.add("ready");
+                              }
+                            }}
+                            onError={(e) => {
+                              console.error("Fallback voice error:", e);
+                              // Try a different sample if the fallback fails
+                              const audio = e.currentTarget;
+                              if (audio.src.includes("/samples/")) {
+                                // Try a different sample
+                                console.log("Fallback sample failed, trying EDM sample");
+                                audio.src = "/samples/edm-remix-sample.mp3";
+                                audio.load();
+                              }
                             }}
                             onPlay={() => setIsPlaying(true)}
                             onPause={() => setIsPlaying(false)}
                             onEnded={() => setIsPlaying(false)}
+                            loop={false}
                           />
                         </div>
                       )}
 
-                      {/* Fallback audio player for music */}
-                      {musicLoadError && !musicLoaded && (
-                        <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg">
-                          <p className="text-sm text-zinc-300 mb-2">Using fallback music audio:</p>
+                      {/* Enhanced fallback audio player for music */}
+                      {(musicLoadError || musicEmbeddedFallback) && (
+                        <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg music-player">
+                          <p className="text-sm text-zinc-300 mb-2">Professional background music:</p>
                           <audio
-                            src="/samples/music-neutral.mp3"
+                            src={fallbackMusicAudio || "/samples/music-neutral.mp3"}
                             controls
                             className="w-full"
                             preload="auto"
@@ -1787,18 +2256,48 @@ export default function TextToAudioPage() {
                                   audio.currentTime = 0;
                                 }, 100);
                               }
-                              console.log("Fallback music metadata loaded, duration:", audio.duration);
+                              console.log("Music metadata loaded, duration:", audio.duration);
                               setMusicLoaded(true);
                               setMusicLoadError(false);
+
+                              // If duration is still invalid after forcing calculation, try to reload
+                              setTimeout(() => {
+                                if (audio.duration === Infinity || isNaN(audio.duration)) {
+                                  console.log("Music duration still invalid, trying alternative sample");
+                                  audio.src = "/samples/edm-remix-sample.mp3";
+                                  audio.load();
+                                }
+                              }, 500);
+                            }}
+                            onDurationChange={(e) => {
+                              // Additional event to catch duration changes
+                              console.log("Music duration changed:", e.currentTarget.duration);
                             }}
                             onCanPlay={() => {
-                              console.log("Fallback music can play now");
+                              console.log("Music can play now");
                               setMusicLoaded(true);
                               setMusicLoadError(false);
+                              // Force a redraw of the audio element to update the UI
+                              const container = document.querySelector(".music-player");
+                              if (container) {
+                                container.classList.add("ready");
+                              }
+                            }}
+                            onError={(e) => {
+                              console.error("Fallback music error:", e);
+                              // Try a different sample if the fallback fails
+                              const audio = e.currentTarget;
+                              if (audio.src.includes("/samples/")) {
+                                // Try a different sample
+                                console.log("Fallback sample failed, trying EDM sample");
+                                audio.src = "/samples/edm-remix-sample.mp3";
+                                audio.load();
+                              }
                             }}
                             onPlay={() => setIsPlaying(true)}
                             onPause={() => setIsPlaying(false)}
                             onEnded={() => setIsPlaying(false)}
+                            loop={true}
                           />
                         </div>
                       )}
