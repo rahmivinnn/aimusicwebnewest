@@ -64,7 +64,6 @@ export default function TextToAudioPage() {
   const [usingFallbackMusic, setUsingFallbackMusic] = useState(false)
   const [voiceEmbeddedFallback, setVoiceEmbeddedFallback] = useState(false)
   const [musicEmbeddedFallback, setMusicEmbeddedFallback] = useState(false)
-  const [songEmbeddedFallback, setSongEmbeddedFallback] = useState(false)
   const [voiceLoadingProgress, setVoiceLoadingProgress] = useState(0)
   const [musicLoadingProgress, setMusicLoadingProgress] = useState(0)
   const [quality, setQuality] = useState("high")
