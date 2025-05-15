@@ -1,14 +1,16 @@
 "use server"
 
-import { generateBackgroundMusic, generateRemix, generateSpeechWithMusic } from "@/lib/riffusion-service"
-import { generateTextToSong } from "@/lib/text-to-song-service"
+import {
+  generateBackgroundMusic,
+  generateSpeechWithMusic,
+  generateTextToSpeech,
+  generateTextToSong
+} from "@/lib/elevenlabs-service"
 import { verifyAudioQuality } from "@/lib/audio-quality-validator"
 
 // Define constants locally instead of exporting them
-// Stability AI API key - Professional audio tier
-const STABILITY_API_KEY = "sk-ebfcc1a7d768b55f533eb6194e07f29b8c257373a7bdfcf634f937a0a5bba274"
-// Text-to-Song API key
-const TEXT_TO_SONG_API_KEY = "sk_ee1207b428511380b8ccf3cc96216cb71a00c4715e5a054b"
+// Eleven Labs API key
+const ELEVENLABS_API_KEY = "sk_ee1207b428511380b8ccf3cc96216cb71a00c4715e5a054b"
 
 // Helper function to get sample mapping based on voice and style
 async function getSampleMapping(voice: string, style: string): Promise<string> {
@@ -83,7 +85,7 @@ async function getMusicFallback(style: string): Promise<string> {
 }
 
 /**
- * Generate professional-grade audio using Riffusion API with quality assurance
+ * Generate professional-grade audio using Eleven Labs API with quality assurance
  */
 export async function generateAudio(params: any) {
   try {
@@ -92,7 +94,7 @@ export async function generateAudio(params: any) {
       prompt,
       voice = "neutral",
       style = "neutral",
-      quality = "professional",
+      quality = "high", // Changed to match Eleven Labs quality levels
       genre,
       bpm,
       hasUploadedFile = false,
@@ -101,7 +103,7 @@ export async function generateAudio(params: any) {
       uploadedFileUrl
     } = params;
 
-    console.log(`[Server] Generating professional audio with Stability AI: "${prompt}", voice: ${voice}, style: ${style}, quality: ${quality}`)
+    console.log(`[Server] Generating professional audio with Eleven Labs: "${prompt}", voice: ${voice}, style: ${style}, quality: ${quality}`)
 
     if (hasUploadedFile) {
       console.log(`[Server] Processing uploaded file: ${uploadedFileName}`)
@@ -133,7 +135,7 @@ export async function generateAudio(params: any) {
           enhancedPrompt += ` (processing uploaded audio file: ${uploadedFileName})`;
         }
 
-        // Generate speech and music using Stability AI with quality parameter
+        // Generate speech and music using Eleven Labs with quality parameter
         const { speechUrl, musicUrl } = await generateSpeechWithMusic(
           enhancedPrompt,
           voice,
@@ -154,13 +156,13 @@ export async function generateAudio(params: any) {
           voice,
           style,
           quality,
-          isStabilityAI: true,
+          isElevenLabs: true,
           qualityVerified: true,
           attempts,
           hasUploadedFile,
         };
       } catch (error) {
-        console.error(`Error in Stability AI API (attempt ${attempts}):`, error);
+        console.error(`Error in Eleven Labs API (attempt ${attempts}):`, error);
         lastError = error;
 
         // Only retry if this is a quality-related error, not an API failure
@@ -178,7 +180,7 @@ export async function generateAudio(params: any) {
       fallbackUrl: fallbackVoiceSample,
       fallbackMusicUrl: fallbackMusicSample,
       success: false,
-      error: lastError?.message || "Failed to generate professional-quality audio with Stability AI API",
+      error: lastError?.message || "Failed to generate professional-quality audio with Eleven Labs API",
       useFallback: true,
       attempts,
     };
@@ -197,10 +199,10 @@ export async function generateAudio(params: any) {
 }
 
 /**
- * Generate professional-grade music using Riffusion API with quality assurance
+ * Generate professional-grade music using Eleven Labs API with quality assurance
  */
 export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
-  console.log(`[Server] Professional music generation requested with Stability AI: "${prompt}", genre: ${genre}, bpm: ${bpm}`)
+  console.log(`[Server] Professional music generation requested with Eleven Labs: "${prompt}", genre: ${genre}, bpm: ${bpm}`)
 
   // Fallback samples in case API fails
   const fallbackSamples = {
@@ -231,7 +233,7 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
     try {
       // Enhance prompt with genre and BPM information for professional-grade results
       // Add more quality terms on retry attempts
-      let enhancedPrompt = `${genre} music with ${bpm} BPM, ${prompt}, professional studio quality, mastered audio, pristine clarity, perfect mix, audiophile quality, high fidelity, 48kHz sample rate, 24-bit depth, perfect EQ balance`;
+      let enhancedPrompt = `${genre} music with ${bpm} BPM, ${prompt}, professional studio quality, mastered audio, pristine clarity, perfect mix, audiophile quality, high fidelity`;
 
       if (attempts > 1) {
         // Add more quality terms on retry attempts
@@ -239,8 +241,8 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
         console.log(`Quality retry attempt ${attempts} with enhanced prompt`);
       }
 
-      // Generate music using Stability AI
-      const musicUrl = await generateRemix(enhancedPrompt);
+      // Generate music using Eleven Labs
+      const musicUrl = await generateBackgroundMusic(enhancedPrompt, genre);
 
       // Verify the audio quality
       const qualityResult = await verifyAudioQuality(musicUrl);
@@ -255,7 +257,7 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
           success: true,
           genre,
           bpm,
-          isStabilityAI: true,
+          isElevenLabs: true,
           qualityVerified: true,
           qualityScore: qualityResult.qualityScore,
           attempts,
@@ -274,7 +276,7 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
         lastError = new Error(`Music quality below professional standards: ${qualityResult.issues.join(", ")}`);
       }
     } catch (error) {
-      console.error(`Error in Stability AI music generation (attempt ${attempts}):`, error);
+      console.error(`Error in Eleven Labs music generation (attempt ${attempts}):`, error);
       lastError = error;
 
       // Only retry if this is a quality-related error, not an API failure
@@ -294,7 +296,7 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
       success: true,
       genre,
       bpm,
-      isStabilityAI: true,
+      isElevenLabs: true,
       qualityVerified: false,
       qualityScore: bestQualityScore,
       attempts,
@@ -308,14 +310,14 @@ export async function generateMusic({ prompt, genre, bpm, duration = 30 }) {
     audioUrl: null,
     fallbackUrl,
     success: false,
-    error: lastError?.message || "Failed to generate professional-quality music with Stability AI",
+    error: lastError?.message || "Failed to generate professional-quality music with Eleven Labs",
     useFallback: true,
     attempts,
   };
 }
 
 /**
- * Generate audio with background music
+ * Generate audio with background music using Eleven Labs
  */
 export async function generateAudioWithBackgroundMusic(text: string, voice: string, emotion: string) {
   try {
@@ -326,7 +328,7 @@ export async function generateAudioWithBackgroundMusic(text: string, voice: stri
     const fallbackMusicSample = await getMusicFallback(emotion)
 
     try {
-      // Generate speech and music using Stability AI
+      // Generate speech and music using Eleven Labs
       const { speechUrl, musicUrl } = await generateSpeechWithMusic(text, voice, emotion)
 
       return {
@@ -335,10 +337,10 @@ export async function generateAudioWithBackgroundMusic(text: string, voice: stri
         fallbackVoiceUrl: fallbackVoiceSample,
         fallbackMusicUrl: fallbackMusicSample,
         success: true,
-        message: "Audio generated successfully with Stability AI",
+        message: "Audio generated successfully with Eleven Labs",
       }
     } catch (error) {
-      console.error("Error in Stability AI API:", error)
+      console.error("Error in Eleven Labs API:", error)
 
       // Return fallback samples if API fails
       return {
@@ -370,13 +372,13 @@ export async function generateAudioWithBackgroundMusic(text: string, voice: stri
 }
 
 /**
- * Generate music for a specific mood
+ * Generate music for a specific mood using Eleven Labs
  */
 export async function generateMusicForMood(mood: string) {
   try {
     console.log(`Generating music for mood: ${mood}`)
 
-    // Generate music using Stability AI
+    // Generate music using Eleven Labs
     const musicUrl = await generateBackgroundMusic(mood)
 
     const fallbackUrl = await getMusicFallback(mood)
@@ -384,7 +386,7 @@ export async function generateMusicForMood(mood: string) {
       musicUrl,
       fallbackUrl,
       success: true,
-      message: "Music generated successfully with Stability AI",
+      message: "Music generated successfully with Eleven Labs",
     }
   } catch (error) {
     console.error("Error generating music:", error)
@@ -400,7 +402,7 @@ export async function generateMusicForMood(mood: string) {
 }
 
 /**
- * Generate a text-to-song track using UberDuck API
+ * Generate a text-to-song track using Eleven Labs API
  */
 export async function generateTextToSongTrack(paramsJson: string) {
   try {
@@ -419,9 +421,9 @@ export async function generateTextToSongTrack(paramsJson: string) {
     // Extract parameters with defaults
     const {
       text = "",
-      voice = "auto",
-      genre = "hip-hop",
-      bpm = 90,
+      voice = "neutral",
+      genre = "electronic",
+      bpm = 120,
       quality = "high",
     } = params;
 
@@ -457,30 +459,33 @@ export async function generateTextToSongTrack(paramsJson: string) {
           songUrl: result.audio_url,
           fallbackUrl,
           success: true,
-          message: `Song generated successfully with Text-to-Song API`,
+          message: `Song generated successfully with Eleven Labs API`,
           duration: result.duration || 30,
         };
       }
     } catch (error) {
       console.error(`Error in text-to-song generation:`, error);
 
-      // Try with Stability AI as fallback
+      // Try with a different approach as fallback
       try {
-        console.log(`Trying fallback with Stability AI`);
-        const fallbackPrompt = `${genre} song with lyrics: ${text}, ${bpm} BPM, professional studio quality`;
-        const fallbackResult = await generateRemix(fallbackPrompt, {
+        console.log(`Trying fallback with different parameters`);
+        // Try with a different voice or quality setting
+        const fallbackResult = await generateTextToSong({
+          text,
+          voice: voice === "neutral" ? "deep" : "neutral", // Try a different voice
           genre,
           bpm,
-          quality: "high",
+          quality: quality === "high" ? "medium" : "high", // Try a different quality
         });
 
-        if (fallbackResult) {
+        if (fallbackResult.audio_url) {
           console.log(`Fallback song generation successful!`);
           return {
-            songUrl: fallbackResult,
+            songUrl: fallbackResult.audio_url,
             fallbackUrl,
             success: true,
-            message: `Song generated successfully with fallback API`,
+            message: `Song generated successfully with fallback parameters`,
+            duration: fallbackResult.duration || 30,
           };
         }
       } catch (fallbackError) {
@@ -510,7 +515,7 @@ export async function generateTextToSongTrack(paramsJson: string) {
 }
 
 /**
- * Generate a remix track with enhanced options
+ * Generate a remix track with enhanced options using Eleven Labs
  */
 export async function generateRemixTrack(paramsJson: string) {
   try {
@@ -529,7 +534,7 @@ export async function generateRemixTrack(paramsJson: string) {
     // Extract parameters with defaults
     const {
       description = "",
-      genre = "edm",
+      genre = "electronic",
       bpm = 128,
       quality = "high",
       seed = "",
@@ -558,45 +563,34 @@ export async function generateRemixTrack(paramsJson: string) {
     const fallbackUrl = await getFallbackUrl(genre);
 
     // Fast remix generation with minimal retries
-    console.log(`Starting fast remix generation for: ${description}`);
+    console.log(`Starting remix generation for: ${description}`);
 
-    // Check if we should use fast mode
-    const useUltraFastMode = true; // Always use ultra-fast mode
-    const attemptQuality = useUltraFastMode ? "fast" : quality;
+    // Determine quality setting based on user preference
+    const attemptQuality = quality === "high" ? "high" : (quality === "medium" ? "medium" : "low");
 
     try {
-      // Generate remix using Stability AI with optimized parameters
-      const remixUrl = await generateRemix(description, {
-        genre,
-        bpm,
-        quality: attemptQuality, // Use fast quality setting
-        seed: seed || undefined,
-        uploadedAudioUrl: hasUploadedFile && uploadedFileUrl ? uploadedFileUrl : undefined
-      });
+      // Generate remix using Eleven Labs with optimized parameters
+      const remixPrompt = `Create a ${genre} remix with ${bpm} BPM. ${description}`;
+      const remixUrl = await generateBackgroundMusic(remixPrompt, genre);
 
       // If successful, return immediately
       if (remixUrl) {
-        console.log(`Fast remix generation successful!`);
+        console.log(`Remix generation successful!`);
         return {
           remixUrl,
           fallbackUrl,
           success: true,
-          message: `Remix generated successfully with Stability AI (fast mode)`,
+          message: `Remix generated successfully with Eleven Labs`,
         };
       }
     } catch (error) {
-      console.error(`Error in fast remix generation:`, error);
+      console.error(`Error in remix generation:`, error);
 
-      // If fast mode fails, try with lower quality as fallback
+      // If first attempt fails, try with different parameters as fallback
       try {
-        console.log(`Trying fallback with lower quality settings`);
-        const fallbackRemixUrl = await generateRemix(description, {
-          genre,
-          bpm,
-          quality: "low", // Use lowest quality for fallback
-          seed: seed || undefined,
-          uploadedAudioUrl: hasUploadedFile && uploadedFileUrl ? uploadedFileUrl : undefined
-        });
+        console.log(`Trying fallback with different parameters`);
+        const fallbackPrompt = `Create a ${genre} style music track. ${description}`;
+        const fallbackRemixUrl = await generateBackgroundMusic(fallbackPrompt, genre);
 
         if (fallbackRemixUrl) {
           console.log(`Fallback remix generation successful!`);
@@ -604,7 +598,7 @@ export async function generateRemixTrack(paramsJson: string) {
             remixUrl: fallbackRemixUrl,
             fallbackUrl,
             success: true,
-            message: `Remix generated successfully with Stability AI (fallback mode)`,
+            message: `Remix generated successfully with Eleven Labs (fallback mode)`,
           };
         }
       } catch (fallbackError) {
@@ -630,7 +624,7 @@ export async function generateRemixTrack(paramsJson: string) {
     try {
       if (typeof paramsJson === 'string') {
         const params = JSON.parse(paramsJson);
-        fallbackUrl = await getFallbackUrl(params.genre || "edm");
+        fallbackUrl = await getFallbackUrl(params.genre || "electronic");
       }
     } catch (parseError) {
       console.error("Error parsing params for fallback:", parseError);

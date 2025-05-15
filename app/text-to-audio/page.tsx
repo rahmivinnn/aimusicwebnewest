@@ -1448,7 +1448,7 @@ export default function TextToAudioPage() {
         uploadedFileUrl: uploadedAudioUrl
       };
 
-      // Generate audio using Riffusion
+      // Generate audio using Eleven Labs
       const result = await generateAudio(params)
 
       // Set fallback URLs
@@ -1944,9 +1944,9 @@ export default function TextToAudioPage() {
   return (
     <div className="container py-8">
       <Toaster />
-      <h1 className="text-3xl font-bold mb-2">Describe Your Audio & Let AI Create!</h1>
+      <h1 className="text-3xl font-bold mb-2">Eleven Labs Text-to-Audio Studio</h1>
       <p className="text-zinc-400 mb-8">
-        Enter a prompt, select voice type and emotion to generate high-quality audio.
+        Enter a prompt, select voice type and emotion to generate professional-grade audio with Eleven Labs.
       </p>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

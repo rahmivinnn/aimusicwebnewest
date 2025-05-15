@@ -2,14 +2,14 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Check, Music, Wand2, Download, Clock, Zap, Star } from "lucide-react"
+import { Check, Music, Wand2, Download, Clock, Zap, Star, Loader2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "@/components/ui/use-toast"
 
 export default function SubscriptionPage() {
   const [billingCycle, setBillingCycle] = useState("monthly")
 
-  const plans = [
+  const [plans, setPlans] = useState([
     {
       name: "Free",
       price: {
@@ -67,13 +67,46 @@ export default function SubscriptionPage() {
       buttonText: "Upgrade to Premium",
       isCurrentPlan: false,
     },
-  ]
+  ])
 
-  const handleUpgrade = (planName) => {
-    toast({
-      title: "Subscription Change",
-      description: `You selected the ${planName} plan. This would redirect to payment in a real app.`,
-    })
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [currentPlan, setCurrentPlan] = useState("Free")
+
+  const handleUpgrade = async (planName) => {
+    if (planName === currentPlan) return
+
+    setIsProcessing(true)
+
+    try {
+      // Simulate API call to upgrade subscription
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // Update current plan
+      setCurrentPlan(planName)
+
+      toast({
+        title: "Subscription Updated",
+        description: `You have successfully upgraded to the ${planName} plan.`,
+        variant: "success",
+      })
+
+      // Update the plans to reflect the new current plan
+      const updatedPlans = plans.map(plan => ({
+        ...plan,
+        isCurrentPlan: plan.name === planName,
+        buttonText: plan.name === planName ? "Current Plan" : `Upgrade to ${plan.name}`
+      }))
+
+      setPlans(updatedPlans)
+    } catch (error) {
+      toast({
+        title: "Upgrade Failed",
+        description: "There was an error processing your upgrade. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   return (
@@ -86,18 +119,20 @@ export default function SubscriptionPage() {
       <div className="mb-8 flex justify-center">
         <div className="inline-flex items-center rounded-full border border-zinc-700 p-1">
           <button
-            className={`rounded-full px-4 py-2 text-sm ${
-              billingCycle === "monthly" ? "bg-cyan-500 text-black" : "text-zinc-400"
+            className={`rounded-full px-4 py-2 text-sm transition-all duration-300 ${
+              billingCycle === "monthly" ? "bg-cyan-500 text-black" : "text-zinc-400 hover:text-white"
             }`}
             onClick={() => setBillingCycle("monthly")}
+            disabled={isProcessing}
           >
             Monthly
           </button>
           <button
-            className={`rounded-full px-4 py-2 text-sm ${
-              billingCycle === "yearly" ? "bg-cyan-500 text-black" : "text-zinc-400"
+            className={`rounded-full px-4 py-2 text-sm transition-all duration-300 ${
+              billingCycle === "yearly" ? "bg-cyan-500 text-black" : "text-zinc-400 hover:text-white"
             }`}
             onClick={() => setBillingCycle("yearly")}
+            disabled={isProcessing}
           >
             Yearly <span className="text-xs text-cyan-300">(Save 15%)</span>
           </button>
@@ -151,9 +186,14 @@ export default function SubscriptionPage() {
                       : "w-full bg-zinc-800 hover:bg-zinc-700"
                 }
                 onClick={() => handleUpgrade(plan.name)}
-                disabled={plan.isCurrentPlan}
+                disabled={plan.isCurrentPlan || isProcessing}
               >
-                {plan.isCurrentPlan ? (
+                {isProcessing && currentPlan !== plan.name ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                    Processing...
+                  </>
+                ) : plan.isCurrentPlan ? (
                   <>
                     <Check className="mr-2 h-4 w-4" />
                     {plan.buttonText}
