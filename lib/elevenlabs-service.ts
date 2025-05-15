@@ -26,6 +26,7 @@ type ElevenLabsResponse = {
   audio_url: string
   seed?: number
   duration?: number
+  blob_size?: number
 }
 
 // Voice mapping for different voice types
@@ -111,6 +112,15 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
     // Get the audio data as a blob
     const audioBlob = await response.blob()
 
+    // Check if the blob is valid (not empty)
+    if (audioBlob.size === 0) {
+      console.error("Eleven Labs returned an empty audio blob")
+      throw new Error("Generated audio is empty. Please try again with different parameters.")
+    }
+
+    // Log the blob size for debugging
+    console.log(`Audio blob size: ${audioBlob.size} bytes`)
+
     // Create a URL for the audio blob
     const audioUrl = URL.createObjectURL(audioBlob)
 
@@ -118,16 +128,57 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
     const audio = new Audio()
     audio.src = audioUrl
 
-    // Wait for metadata to load to get duration
-    const duration = await new Promise<number>((resolve) => {
-      audio.addEventListener('loadedmetadata', () => resolve(audio.duration))
-      audio.addEventListener('error', () => resolve(30)) // Default to 30 seconds if error
-      audio.load()
-    })
+    // Wait for metadata to load to get duration with a timeout
+    const duration = await Promise.race([
+      new Promise<number>((resolve) => {
+        audio.addEventListener('loadedmetadata', () => {
+          // Check if duration is valid
+          if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
+            console.warn("Invalid audio duration, trying to force duration calculation")
+            // Force duration calculation for problematic browsers
+            audio.currentTime = 1e101
+            setTimeout(() => {
+              audio.currentTime = 0
+              // Check again after forcing calculation
+              if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
+                console.warn("Still couldn't determine duration, using default")
+                resolve(30)
+              } else {
+                resolve(audio.duration)
+              }
+            }, 200)
+          } else {
+            resolve(audio.duration)
+          }
+        })
+        audio.addEventListener('error', (e) => {
+          console.error("Error loading audio metadata:", e)
+          resolve(30) // Default to 30 seconds if error
+        })
+        audio.load()
+      }),
+      // Add a timeout to prevent hanging
+      new Promise<number>((resolve) => setTimeout(() => {
+        console.warn("Timeout waiting for audio metadata, using default duration")
+        resolve(30)
+      }, 5000))
+    ])
+
+    // Validate the audio URL by trying to fetch a small part of it
+    try {
+      const testFetch = await fetch(audioUrl, { method: 'HEAD' })
+      if (!testFetch.ok) {
+        console.warn(`Audio URL validation failed: ${testFetch.status} ${testFetch.statusText}`)
+      }
+    } catch (error) {
+      console.warn("Error validating audio URL:", error)
+      // Continue anyway, as the blob URL might still work
+    }
 
     return {
       audio_url: audioUrl,
       duration: duration || 30, // Default to 30 seconds if duration can't be determined
+      blob_size: audioBlob.size, // Include blob size for debugging
     }
   } catch (error) {
     console.error("Error generating audio with Eleven Labs:", error)
@@ -228,30 +279,64 @@ export async function generateTextToSpeech(options: {
 /**
  * Generate background music using Eleven Labs
  */
-export async function generateBackgroundMusic(emotion: string, genre?: string): Promise<string> {
+export async function generateBackgroundMusic(emotion: string, genre?: string, isRemix: boolean = false): Promise<string> {
   try {
     // For music generation, we'll use a specific prompt based on emotion and genre
-    let prompt = `Create background music that is ${emotion}`
-    if (genre) {
-      prompt += ` in the ${genre} genre`
+    let prompt = ""
+
+    if (isRemix) {
+      // Enhanced prompt specifically for remixes
+      prompt = `Create a professional ${genre || 'electronic'} remix with ${emotion} mood. Include strong beats, clear melody, and dynamic structure. Make it sound like a professional studio production with perfect mastering.`
+    } else {
+      // Standard prompt for background music
+      prompt = `Create background music that is ${emotion}`
+      if (genre) {
+        prompt += ` in the ${genre} genre`
+      }
     }
 
+    // Add quality instructions to the prompt
+    prompt += `. Make it high quality, professionally mastered audio with clear sound.`
+
+    console.log(`Generating ${isRemix ? 'remix' : 'background music'} with prompt: "${prompt}"`)
+
     // Use a specific voice optimized for music
-    const voice_id = "z9fAnlkpzviPz146aGWa" // Serena - good for music
+    // For remixes, use a different voice that might work better for instrumental music
+    const voice_id = isRemix
+      ? "SOYHLrjzK2X1ezoPC6cr" // Josh - better for remixes
+      : "z9fAnlkpzviPz146aGWa" // Serena - good for music
 
     // Use the multilingual model for best quality
     const model_id = "eleven_multilingual_v2"
 
-    // Generate the audio
+    // Voice settings optimized for music generation
+    const voice_settings = {
+      stability: 0.3,         // Lower stability for more creative variation
+      similarity_boost: 0.5,  // Balanced similarity
+      style: 0.8,             // Higher style for more expressive music
+      use_speaker_boost: true,
+      speed: 1.0              // Normal speed
+    }
+
+    // Generate the audio with enhanced settings
     const result = await generateElevenLabsAudio({
       text: prompt,
       voice_id,
       model_id,
+      voice_settings
     })
+
+    // Validate the result
+    if (!result.audio_url) {
+      throw new Error("Failed to generate audio URL")
+    }
+
+    // Log the blob size for debugging
+    console.log(`Generated ${isRemix ? 'remix' : 'background music'} with blob size: ${result.blob_size || 'unknown'} bytes`)
 
     return result.audio_url
   } catch (error) {
-    console.error("Error generating background music:", error)
+    console.error(`Error generating ${isRemix ? 'remix' : 'background music'}:`, error)
     throw error
   }
 }

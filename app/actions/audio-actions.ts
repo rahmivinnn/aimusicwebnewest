@@ -576,43 +576,103 @@ export async function generateRemixTrack(paramsJson: string) {
     // Determine quality setting based on user preference
     const attemptQuality = quality === "high" ? "high" : (quality === "medium" ? "medium" : "low");
 
-    try {
-      // Generate remix using Eleven Labs with optimized parameters
-      const remixPrompt = `Create a ${genre} remix with ${bpm} BPM. ${description}`;
-      const remixUrl = await generateBackgroundMusic(remixPrompt, genre);
+    // Maximum number of retries for remix generation
+    const MAX_RETRY_ATTEMPTS = 2;
+    let lastError = null;
 
-      // If successful, return immediately
-      if (remixUrl) {
-        console.log(`Remix generation successful!`);
+    for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        console.log(`Remix generation attempt ${attempt} of ${MAX_RETRY_ATTEMPTS}`);
+
+        // Create an enhanced prompt for remix generation
+        let remixPrompt;
+        if (attempt === 1) {
+          // First attempt with standard parameters
+          remixPrompt = description;
+        } else {
+          // Second attempt with more detailed instructions
+          remixPrompt = `${description}. Make it a professional ${genre} track with clear beats and melody.`;
+        }
+
+        // Call the enhanced background music generator with isRemix=true
+        const remixUrl = await generateBackgroundMusic(remixPrompt, genre, true);
+
+        // Verify the remix URL is valid
+        if (remixUrl) {
+          console.log(`Remix generation successful on attempt ${attempt}!`);
+
+          // Verify the audio quality
+          try {
+            const qualityResult = await verifyAudioQuality(remixUrl);
+            console.log(`Remix quality verification:`, qualityResult);
+
+            if (qualityResult.passes || qualityResult.qualityScore > 50) {
+              return {
+                remixUrl,
+                fallbackUrl,
+                success: true,
+                message: `Remix generated successfully with Eleven Labs`,
+                qualityScore: qualityResult.qualityScore,
+                attempt,
+              };
+            } else {
+              console.warn(`Remix quality check failed: ${qualityResult.issues.join(', ')}`);
+              // Continue to next attempt if quality is poor
+              lastError = new Error(`Poor quality remix: ${qualityResult.issues.join(', ')}`);
+            }
+          } catch (qualityError) {
+            console.error(`Error verifying remix quality:`, qualityError);
+            // If we can't verify quality but have a URL, return it anyway
+            return {
+              remixUrl,
+              fallbackUrl,
+              success: true,
+              message: `Remix generated successfully (quality unverified)`,
+              attempt,
+            };
+          }
+        }
+      } catch (error) {
+        console.error(`Error in remix generation attempt ${attempt}:`, error);
+        lastError = error;
+
+        // Short delay before retry
+        if (attempt < MAX_RETRY_ATTEMPTS) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    }
+
+    // If all attempts failed, try one last approach with different voice settings
+    try {
+      console.log(`Trying last resort approach for remix generation`);
+
+      // Use a completely different approach for the last attempt
+      const lastResortPrompt = `Create a ${genre} instrumental track with ${bpm} BPM. ${description}`;
+
+      // Use the text-to-song function as a fallback approach
+      const songResult = await generateTextToSong({
+        text: lastResortPrompt,
+        voice: "music-male", // Use music-optimized voice
+        genre,
+        bpm,
+        quality: "high",
+        randomizeVoice: false
+      });
+
+      if (songResult.audio_url) {
+        console.log(`Last resort remix generation successful!`);
         return {
-          remixUrl,
+          remixUrl: songResult.audio_url,
           fallbackUrl,
           success: true,
-          message: `Remix generated successfully with Eleven Labs`,
+          message: `Remix generated successfully with alternative method`,
+          duration: songResult.duration,
         };
       }
-    } catch (error) {
-      console.error(`Error in remix generation:`, error);
-
-      // If first attempt fails, try with different parameters as fallback
-      try {
-        console.log(`Trying fallback with different parameters`);
-        const fallbackPrompt = `Create a ${genre} style music track. ${description}`;
-        const fallbackRemixUrl = await generateBackgroundMusic(fallbackPrompt, genre);
-
-        if (fallbackRemixUrl) {
-          console.log(`Fallback remix generation successful!`);
-          return {
-            remixUrl: fallbackRemixUrl,
-            fallbackUrl,
-            success: true,
-            message: `Remix generated successfully with Eleven Labs (fallback mode)`,
-          };
-        }
-      } catch (fallbackError) {
-        console.error(`Fallback remix generation also failed:`, fallbackError);
-        // Continue to fallback handling below
-      }
+    } catch (lastResortError) {
+      console.error(`Last resort remix generation failed:`, lastResortError);
+      // Continue to fallback handling
     }
 
     // If all attempts failed, use fallback

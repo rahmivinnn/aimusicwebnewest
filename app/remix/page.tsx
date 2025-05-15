@@ -836,27 +836,48 @@ export default function RemixPage() {
                       onLoadedMetadata={(e) => {
                         // Force metadata to load properly
                         const audio = e.currentTarget;
-                        if (audio.duration === Infinity || isNaN(audio.duration)) {
-                          // Force duration calculation for problematic browsers
-                          audio.currentTime = 1e101;
-                          setTimeout(() => {
-                            audio.currentTime = 0;
-                          }, 100);
-                        }
-                        console.log("Audio metadata loaded, duration:", audio.duration);
 
-                        // If duration is still invalid after forcing calculation, try to reload
-                        setTimeout(() => {
-                          if (audio.duration === Infinity || isNaN(audio.duration)) {
-                            console.log("Duration still invalid, reloading audio");
-                            const currentSrc = audio.src;
-                            audio.src = "";
+                        // Log the audio details for debugging
+                        console.log("Audio metadata loaded, initial duration:", audio.duration);
+                        console.log("Audio source:", audio.src);
+                        console.log("Audio ready state:", audio.readyState);
+
+                        // Check if we have a valid duration
+                        if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
+                          console.warn("Invalid duration detected, forcing calculation");
+
+                          // Force duration calculation for problematic browsers
+                          try {
+                            audio.currentTime = 1e101;
                             setTimeout(() => {
-                              audio.src = currentSrc;
-                              audio.load();
-                            }, 100);
+                              audio.currentTime = 0;
+                              console.log("After forcing calculation, duration:", audio.duration);
+
+                              // If still invalid, try a more aggressive approach
+                              if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
+                                console.warn("Still invalid duration, trying alternative approach");
+
+                                // Try to reload the audio completely
+                                const currentSrc = audio.src;
+                                const isBlob = currentSrc.startsWith('blob:');
+
+                                // For blob URLs, we need to be careful not to lose the reference
+                                if (!isBlob) {
+                                  audio.src = "";
+                                  setTimeout(() => {
+                                    audio.src = currentSrc;
+                                    audio.load();
+                                  }, 200);
+                                } else {
+                                  // For blob URLs, try a different approach
+                                  audio.load();
+                                }
+                              }
+                            }, 200);
+                          } catch (error) {
+                            console.error("Error forcing duration calculation:", error);
                           }
-                        }, 500);
+                        }
                       }}
                       onDurationChange={(e) => {
                         // Additional event to catch duration changes
@@ -874,23 +895,42 @@ export default function RemixPage() {
                         console.error("Audio error:", e);
                         // Enhanced error handling with multiple fallback attempts
                         const audio = e.currentTarget;
+                        const errorCode = audio.error ? audio.error.code : 0;
+                        const errorMessage = audio.error ? audio.error.message : "Unknown error";
+
+                        console.warn(`Audio error details: Code ${errorCode}, Message: ${errorMessage}`);
+
+                        // Show a toast with the error
+                        toast({
+                          title: "Audio playback issue",
+                          description: "Using fallback audio instead",
+                          variant: "warning",
+                        });
 
                         // Try to reload with a different source if there's an error
                         if (audio.src === remixUrl) {
-                          if (remixUrl.includes("blob:")) {
-                            // For blob URLs, try a direct fallback
-                            console.log("Error with blob URL, trying fallback");
-                            audio.src = getFallbackUrl(genre);
-                          } else if (remixUrl.includes("api")) {
-                            // For API URLs, try a fallback
-                            console.log("Error with API URL, trying fallback");
-                            audio.src = getFallbackUrl(genre);
-                          } else {
-                            // For other URLs, try the EDM fallback
-                            console.log("Error with URL, trying EDM fallback");
-                            audio.src = "/samples/edm-remix-sample.mp3";
-                          }
+                          // First try: Use genre-specific fallback
+                          const fallbackUrl = getFallbackUrl(genre);
+                          console.log("Using genre-specific fallback:", fallbackUrl);
+
+                          // Set the source and load
+                          audio.src = fallbackUrl;
                           audio.load();
+
+                          // Add a one-time error handler for the fallback
+                          const fallbackErrorHandler = () => {
+                            console.warn("Fallback audio also failed, using guaranteed fallback");
+
+                            // Second try: Use the most reliable fallback
+                            audio.src = "/samples/edm-remix-sample.mp3";
+                            audio.load();
+
+                            // Remove this error handler to prevent loops
+                            audio.removeEventListener('error', fallbackErrorHandler);
+                          };
+
+                          // Add the error handler for one-time use
+                          audio.addEventListener('error', fallbackErrorHandler, { once: true });
                         }
                       }}
                       onPlay={() => setIsPlaying(true)}
