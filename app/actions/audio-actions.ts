@@ -100,7 +100,8 @@ export async function generateAudio(params: any) {
       hasUploadedFile = false,
       uploadedFileName,
       uploadedFileType,
-      uploadedFileUrl
+      uploadedFileUrl,
+      randomizeVoice = true
     } = params;
 
     console.log(`[Server] Generating professional audio with Eleven Labs: "${prompt}", voice: ${voice}, style: ${style}, quality: ${quality}`)
@@ -136,13 +137,14 @@ export async function generateAudio(params: any) {
         }
 
         // Generate speech and music using Eleven Labs with quality parameter
-        const { speechUrl, musicUrl } = await generateSpeechWithMusic(
+        const { speechUrl, musicUrl, voiceId } = await generateSpeechWithMusic(
           enhancedPrompt,
           voice,
           style,
           genre, // Use genre if provided
           quality, // Pass quality parameter
-          hasUploadedFile ? uploadedFileUrl : undefined // Pass uploaded file URL if available
+          hasUploadedFile ? uploadedFileUrl : undefined, // Pass uploaded file URL if available
+          randomizeVoice // Pass randomize voice parameter
         );
 
         // If we got here, generation was successful
@@ -160,6 +162,7 @@ export async function generateAudio(params: any) {
           qualityVerified: true,
           attempts,
           hasUploadedFile,
+          voiceId, // Include the voice ID that was used
         };
       } catch (error) {
         console.error(`Error in Eleven Labs API (attempt ${attempts}):`, error);
@@ -425,6 +428,7 @@ export async function generateTextToSongTrack(paramsJson: string) {
       genre = "electronic",
       bpm = 120,
       quality = "high",
+      randomizeVoice = true,
     } = params;
 
     // Validate required parameters
@@ -450,7 +454,8 @@ export async function generateTextToSongTrack(paramsJson: string) {
         voice,
         genre,
         bpm,
-        quality
+        quality,
+        randomizeVoice
       });
 
       if (result.audio_url) {
@@ -461,6 +466,7 @@ export async function generateTextToSongTrack(paramsJson: string) {
           success: true,
           message: `Song generated successfully with Eleven Labs API`,
           duration: result.duration || 30,
+          voiceId: result.voiceId, // Include the voice ID that was used
         };
       }
     } catch (error) {
@@ -476,6 +482,7 @@ export async function generateTextToSongTrack(paramsJson: string) {
           genre,
           bpm,
           quality: quality === "high" ? "medium" : "high", // Try a different quality
+          randomizeVoice: true, // Always randomize for fallback
         });
 
         if (fallbackResult.audio_url) {
@@ -486,6 +493,7 @@ export async function generateTextToSongTrack(paramsJson: string) {
             success: true,
             message: `Song generated successfully with fallback parameters`,
             duration: fallbackResult.duration || 30,
+            voiceId: fallbackResult.voiceId, // Include the voice ID that was used
           };
         }
       } catch (fallbackError) {

@@ -30,11 +30,34 @@ type ElevenLabsResponse = {
 
 // Voice mapping for different voice types
 const VOICE_MAPPING = {
+  // Male voices
   male: "ErXwobaYiN019PkySvjV", // Antoni - Male
+  "male-deep": "VR6AewLTigWG4xSOukaG", // Arnold - Deep Male
+  "male-warm": "pNInz6obpgDQGcFmaJgB", // Adam - Warm Male
+  "male-british": "ODq5zmih8GrVes37Dizd", // Harry - British Male
+  "male-american": "SOYHLrjzK2X1ezoPC6cr", // Josh - American Male
+
+  // Female voices
   female: "EXAVITQu4vr4xnSDxMaL", // Bella - Female
+  "female-warm": "jBpfuIE2acCO8z3wKNLl", // Grace - Warm Female
+  "female-soft": "zcAOhNBS3c14rBihAFp1", // Lily - Soft Female
+  "female-british": "oWAxZDx7w5VEj9dCyTzz", // Charlotte - British Female
+  "female-american": "z9fAnlkpzviPz146aGWa", // Serena - American Female
+
+  // Neutral voices
   neutral: "onwK4e9ZLuTAKqWW03F9", // Daniel - Neutral
+  "neutral-calm": "AZnzlk1XvdvUeBnXmlld", // Alex - Calm Neutral
+
+  // Special purpose voices
   warm: "pNInz6obpgDQGcFmaJgB", // Adam - Warm
   deep: "VR6AewLTigWG4xSOukaG", // Arnold - Deep
+  storyteller: "TX3LPaxmHKxFdv7VOQHJ", // Thomas - Storyteller
+  announcer: "flq6f7yk4E4fJM5XTYuZ", // Patrick - Announcer
+  narrator: "GBv7mTt0atIp3Br8iCZE", // Matthew - Narrator
+
+  // Music-optimized voices
+  "music-female": "z9fAnlkpzviPz146aGWa", // Serena - Good for music
+  "music-male": "SOYHLrjzK2X1ezoPC6cr", // Josh - Good for music
 }
 
 // Model mapping for different quality levels
@@ -49,8 +72,8 @@ const MODEL_MAPPING = {
  */
 export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promise<ElevenLabsResponse> {
   try {
-    const { 
-      text, 
+    const {
+      text,
       voice_id = "onwK4e9ZLuTAKqWW03F9", // Default to Daniel (neutral)
       model_id = "eleven_multilingual_v2", // Default to highest quality
       voice_settings,
@@ -87,14 +110,14 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
 
     // Get the audio data as a blob
     const audioBlob = await response.blob()
-    
+
     // Create a URL for the audio blob
     const audioUrl = URL.createObjectURL(audioBlob)
 
     // Create an audio element to get the duration
     const audio = new Audio()
     audio.src = audioUrl
-    
+
     // Wait for metadata to load to get duration
     const duration = await new Promise<number>((resolve) => {
       audio.addEventListener('loadedmetadata', () => resolve(audio.duration))
@@ -115,18 +138,37 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
 /**
  * Generate text-to-speech audio using Eleven Labs
  */
-export async function generateTextToSpeech(options: { 
-  text: string, 
-  voice_type?: string, 
-  emotion?: string, 
-  quality?: string 
+export async function generateTextToSpeech(options: {
+  text: string,
+  voice_type?: string,
+  emotion?: string,
+  quality?: string,
+  randomizeVoice?: boolean
 }): Promise<string> {
   try {
-    const { text, voice_type = "neutral", emotion = "neutral", quality = "high" } = options
+    const { text, voice_type = "neutral", emotion = "neutral", quality = "high", randomizeVoice = false } = options
 
     // Map voice type to Eleven Labs voice ID
-    const voice_id = VOICE_MAPPING[voice_type as keyof typeof VOICE_MAPPING] || VOICE_MAPPING.neutral
-    
+    let voice_id: string;
+
+    if (randomizeVoice) {
+      // Get all voice IDs that match the category (e.g., all male voices if voice_type is "male")
+      const categoryVoices = Object.entries(VOICE_MAPPING)
+        .filter(([key]) => key === voice_type || key.startsWith(`${voice_type}-`))
+        .map(([_, id]) => id);
+
+      // If we have category voices, randomly select one, otherwise use the exact match or default
+      if (categoryVoices.length > 0) {
+        const randomIndex = Math.floor(Math.random() * categoryVoices.length);
+        voice_id = categoryVoices[randomIndex];
+      } else {
+        voice_id = VOICE_MAPPING[voice_type as keyof typeof VOICE_MAPPING] || VOICE_MAPPING.neutral;
+      }
+    } else {
+      // Use the exact voice type specified
+      voice_id = VOICE_MAPPING[voice_type as keyof typeof VOICE_MAPPING] || VOICE_MAPPING.neutral;
+    }
+
     // Map quality to model ID
     const model_id = MODEL_MAPPING[quality as keyof typeof MODEL_MAPPING] || MODEL_MAPPING.high
 
@@ -193,7 +235,7 @@ export async function generateBackgroundMusic(emotion: string, genre?: string): 
     if (genre) {
       prompt += ` in the ${genre} genre`
     }
-    
+
     // Use a specific voice optimized for music
     const voice_id = "z9fAnlkpzviPz146aGWa" // Serena - good for music
 
@@ -223,9 +265,13 @@ export async function generateSpeechWithMusic(
   emotion: string = "neutral",
   genre?: string,
   quality: string = "high",
-  uploadedAudioUrl?: string
-): Promise<{ speechUrl: string; musicUrl: string }> {
+  uploadedAudioUrl?: string,
+  randomizeVoice: boolean = true
+): Promise<{ speechUrl: string; musicUrl: string; voiceId?: string }> {
   try {
+    // Track which voice ID was used (for display purposes)
+    let usedVoiceId: string | undefined;
+
     // Generate speech and music in parallel
     const [speechUrl, musicUrl] = await Promise.all([
       // If we have an uploaded audio URL, use it instead of generating new speech
@@ -236,6 +282,14 @@ export async function generateSpeechWithMusic(
             voice_type,
             emotion,
             quality,
+            randomizeVoice,
+          }).then(url => {
+            // Get the voice ID that was used (for informational purposes)
+            const voiceKey = Object.entries(VOICE_MAPPING).find(
+              ([_, id]) => id === VOICE_MAPPING[voice_type as keyof typeof VOICE_MAPPING]
+            )?.[0];
+            usedVoiceId = voiceKey;
+            return url;
           }),
       generateBackgroundMusic(emotion, genre),
     ])
@@ -257,6 +311,7 @@ export async function generateSpeechWithMusic(
     return {
       speechUrl,
       musicUrl,
+      voiceId: usedVoiceId
     }
   } catch (error) {
     console.error("Error generating speech with music:", error)
@@ -267,22 +322,63 @@ export async function generateSpeechWithMusic(
 /**
  * Generate a song from text using Eleven Labs
  */
-export async function generateTextToSong(options: { 
-  text: string, 
-  voice?: string, 
-  genre?: string, 
-  bpm?: number, 
-  quality?: string 
-}): Promise<{ audio_url: string, duration?: number }> {
+export async function generateTextToSong(options: {
+  text: string,
+  voice?: string,
+  genre?: string,
+  bpm?: number,
+  quality?: string,
+  randomizeVoice?: boolean
+}): Promise<{ audio_url: string, duration?: number, voiceId?: string }> {
   try {
-    const { text, voice = "neutral", genre = "electronic", bpm = 120, quality = "high" } = options
+    const {
+      text,
+      voice = "neutral",
+      genre = "electronic",
+      bpm = 120,
+      quality = "high",
+      randomizeVoice = true
+    } = options
 
     // Create a prompt that instructs the model to generate a song
     const songPrompt = `Create a ${genre} song with lyrics: ${text}. The tempo should be ${bpm} BPM.`
-    
+
     // Map voice to Eleven Labs voice ID
-    const voice_id = VOICE_MAPPING[voice as keyof typeof VOICE_MAPPING] || VOICE_MAPPING.neutral
-    
+    let voice_id: string;
+
+    if (randomizeVoice) {
+      // For songs, prefer music-optimized voices if available
+      if (voice === "male" || voice === "female") {
+        const musicVoiceKey = `music-${voice}`;
+        if (VOICE_MAPPING[musicVoiceKey as keyof typeof VOICE_MAPPING]) {
+          voice_id = VOICE_MAPPING[musicVoiceKey as keyof typeof VOICE_MAPPING];
+        } else {
+          // Get all voice IDs that match the category
+          const categoryVoices = Object.entries(VOICE_MAPPING)
+            .filter(([key]) => key === voice || key.startsWith(`${voice}-`))
+            .map(([_, id]) => id);
+
+          if (categoryVoices.length > 0) {
+            const randomIndex = Math.floor(Math.random() * categoryVoices.length);
+            voice_id = categoryVoices[randomIndex];
+          } else {
+            voice_id = VOICE_MAPPING[voice as keyof typeof VOICE_MAPPING] || VOICE_MAPPING.neutral;
+          }
+        }
+      } else {
+        // For other voice types, just use the specified voice
+        voice_id = VOICE_MAPPING[voice as keyof typeof VOICE_MAPPING] || VOICE_MAPPING.neutral;
+      }
+    } else {
+      // Use the exact voice specified
+      voice_id = VOICE_MAPPING[voice as keyof typeof VOICE_MAPPING] || VOICE_MAPPING.neutral;
+    }
+
+    // Get the voice name for return value
+    const voiceKey = Object.entries(VOICE_MAPPING).find(
+      ([_, id]) => id === voice_id
+    )?.[0];
+
     // Use the highest quality model for songs
     const model_id = MODEL_MAPPING[quality as keyof typeof MODEL_MAPPING] || MODEL_MAPPING.high
 
@@ -296,6 +392,7 @@ export async function generateTextToSong(options: {
     return {
       audio_url: result.audio_url,
       duration: result.duration,
+      voiceId: voiceKey
     }
   } catch (error) {
     console.error("Error generating text-to-song:", error)

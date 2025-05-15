@@ -4,8 +4,9 @@ import { useState, useRef, useCallback, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
+import { Switch } from "@/components/ui/switch"
 import {
   Download,
   Share2,
@@ -34,11 +35,13 @@ export default function TextToAudioPage() {
   const [text, setText] = useState("")
   const [voice, setVoice] = useState("neutral")
   const [style, setStyle] = useState("neutral")
+  const [randomizeVoice, setRandomizeVoice] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedVoiceAudio, setGeneratedVoiceAudio] = useState<string | null>(null)
   const [fallbackVoiceAudio, setFallbackVoiceAudio] = useState<string | null>(null)
   const [generatedMusicAudio, setGeneratedMusicAudio] = useState<string | null>(null)
   const [fallbackMusicAudio, setFallbackMusicAudio] = useState<string | null>(null)
+  const [usedVoiceId, setUsedVoiceId] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [volume, setVolume] = useState(80)
   const [musicVolume, setMusicVolume] = useState(50)
@@ -82,6 +85,7 @@ export default function TextToAudioPage() {
   const [songLoadingProgress, setSongLoadingProgress] = useState(0)
   const [usingSongFallback, setUsingSongFallback] = useState(false)
   const [songEmbeddedFallback, setSongEmbeddedFallback] = useState(false)
+  const [usedSongVoiceId, setUsedSongVoiceId] = useState<string | null>(null)
   const songAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const [effects, setEffects] = useState({
@@ -103,13 +107,38 @@ export default function TextToAudioPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const animationRef = useRef<number | null>(null)
 
-  // Voice options
+  // Voice options grouped by category
   const voices = [
-    { id: "male", name: "Male Voice" },
-    { id: "female", name: "Female Voice" },
-    { id: "neutral", name: "Neutral Voice" },
-    { id: "warm", name: "Warm Voice" },
-    { id: "deep", name: "Deep Voice" },
+    // Main categories
+    { id: "male", name: "Male Voice", category: "main" },
+    { id: "female", name: "Female Voice", category: "main" },
+    { id: "neutral", name: "Neutral Voice", category: "main" },
+
+    // Male variations
+    { id: "male-deep", name: "Deep Male Voice", category: "male" },
+    { id: "male-warm", name: "Warm Male Voice", category: "male" },
+    { id: "male-british", name: "British Male Voice", category: "male" },
+    { id: "male-american", name: "American Male Voice", category: "male" },
+
+    // Female variations
+    { id: "female-warm", name: "Warm Female Voice", category: "female" },
+    { id: "female-soft", name: "Soft Female Voice", category: "female" },
+    { id: "female-british", name: "British Female Voice", category: "female" },
+    { id: "female-american", name: "American Female Voice", category: "female" },
+
+    // Neutral variations
+    { id: "neutral-calm", name: "Calm Neutral Voice", category: "neutral" },
+
+    // Special purpose
+    { id: "warm", name: "Warm Voice", category: "special" },
+    { id: "deep", name: "Deep Voice", category: "special" },
+    { id: "storyteller", name: "Storyteller Voice", category: "special" },
+    { id: "announcer", name: "Announcer Voice", category: "special" },
+    { id: "narrator", name: "Narrator Voice", category: "special" },
+
+    // Music optimized
+    { id: "music-male", name: "Male Singer", category: "music" },
+    { id: "music-female", name: "Female Singer", category: "music" },
   ]
 
   // Music genre options
@@ -1339,6 +1368,7 @@ export default function TextToAudioPage() {
         genre: selectedGenre,
         bpm: currentBpm,
         quality: quality,
+        randomizeVoice: randomizeVoice
       };
 
       // Generate song
@@ -1356,6 +1386,21 @@ export default function TextToAudioPage() {
         if (songAudioRef.current) {
           songAudioRef.current.src = result.songUrl
           songAudioRef.current.load()
+        }
+
+        // Set the voice ID that was used
+        if (result.voiceId) {
+          setUsedSongVoiceId(result.voiceId)
+
+          // Show a toast with the voice that was used if it's different from what was selected
+          if (randomizeVoice && result.voiceId !== voice) {
+            const voiceName = voices.find(v => v.id === result.voiceId)?.name || result.voiceId;
+            toast({
+              title: "Voice Selected for Song",
+              description: `Using ${voiceName} for this song.`,
+              variant: "default",
+            })
+          }
         }
 
         toast({
@@ -1445,7 +1490,9 @@ export default function TextToAudioPage() {
         hasUploadedFile: !!uploadedFile,
         uploadedFileName: uploadedFile?.name,
         uploadedFileType: uploadedFile?.type,
-        uploadedFileUrl: uploadedAudioUrl
+        uploadedFileUrl: uploadedAudioUrl,
+        // Add randomize voice option
+        randomizeVoice: randomizeVoice
       };
 
       // Generate audio using Eleven Labs
@@ -1464,6 +1511,21 @@ export default function TextToAudioPage() {
       if (result.success) {
         if (result.audioUrl) {
           setGeneratedVoiceAudio(result.audioUrl)
+
+          // Set the voice ID that was used
+          if (result.voiceId) {
+            setUsedVoiceId(result.voiceId)
+
+            // Show a toast with the voice that was used if it's different from what was selected
+            if (randomizeVoice && result.voiceId !== voice) {
+              const voiceName = voices.find(v => v.id === result.voiceId)?.name || result.voiceId;
+              toast({
+                title: "Voice Selected",
+                description: `Using ${voiceName} for this audio.`,
+                variant: "default",
+              })
+            }
+          }
         } else if (result.useFallback && result.fallbackUrl) {
           setUsingFallbackVoice(true)
           setGeneratedVoiceAudio(result.fallbackUrl)
@@ -2102,17 +2164,85 @@ export default function TextToAudioPage() {
 
           <div className="grid grid-cols-1 gap-4 mb-6">
             <div>
-              <label className="block text-sm text-zinc-400 mb-2">Voice Type</label>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm text-zinc-400">Voice Type</label>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-zinc-400">Randomize</label>
+                  <Switch
+                    checked={randomizeVoice}
+                    onCheckedChange={setRandomizeVoice}
+                    className="data-[state=checked]:bg-cyan-500"
+                  />
+                </div>
+              </div>
               <Select value={voice} onValueChange={setVoice}>
                 <SelectTrigger className="border-zinc-700 bg-zinc-900">
                   <SelectValue placeholder="Select voice" />
                 </SelectTrigger>
-                <SelectContent className="border-zinc-700 bg-zinc-900">
-                  {voices.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>
-                      {v.name}
-                    </SelectItem>
-                  ))}
+                <SelectContent className="border-zinc-700 bg-zinc-900 max-h-[300px]">
+                  <SelectGroup>
+                    <SelectLabel>Main Voices</SelectLabel>
+                    {voices.filter(v => v.category === "main").map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectSeparator />
+
+                  <SelectGroup>
+                    <SelectLabel>Male Voices</SelectLabel>
+                    {voices.filter(v => v.category === "male").map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectSeparator />
+
+                  <SelectGroup>
+                    <SelectLabel>Female Voices</SelectLabel>
+                    {voices.filter(v => v.category === "female").map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectSeparator />
+
+                  <SelectGroup>
+                    <SelectLabel>Neutral Voices</SelectLabel>
+                    {voices.filter(v => v.category === "neutral").map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectSeparator />
+
+                  <SelectGroup>
+                    <SelectLabel>Special Purpose</SelectLabel>
+                    {voices.filter(v => v.category === "special").map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+
+                  <SelectSeparator />
+
+                  <SelectGroup>
+                    <SelectLabel>Music Optimized</SelectLabel>
+                    {voices.filter(v => v.category === "music").map((v) => (
+                      <SelectItem key={v.id} value={v.id}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
                 </SelectContent>
               </Select>
             </div>
@@ -2292,7 +2422,8 @@ export default function TextToAudioPage() {
                             }
                           >
                             {voiceLoaded
-                              ? "Voice loaded" + (usingFallbackVoice ? " (using fallback)" : "")
+                              ? "Voice loaded" + (usingFallbackVoice ? " (using fallback)" : "") +
+                                (usedVoiceId && !usingFallbackVoice ? ` (${voices.find(v => v.id === usedVoiceId)?.name || usedVoiceId})` : "")
                               : voiceLoadError
                                 ? "Voice load error"
                                 : "Loading voice..."}
