@@ -630,8 +630,8 @@ export default function HomePage() {
             </div>
             <div className="ml-4 flex-shrink-0">
               <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="40" cy="40" r="25" stroke="#ffc107" stroke-width="4" />
-                <path d="M40 15L40 25M40 55L40 65M65 40L55 40M25 40L15 40M57 23L50 30M30 50L23 57M57 57L50 50M30 30L23 23" stroke="#ffc107" stroke-width="4" stroke-linecap="round" />
+                <circle cx="40" cy="40" r="25" stroke="#ffc107" strokeWidth="4" />
+                <path d="M40 15L40 25M40 55L40 65M65 40L55 40M25 40L15 40M57 23L50 30M30 50L23 57M57 57L50 50M30 30L23 23" stroke="#ffc107" strokeWidth="4" strokeLinecap="round" />
               </svg>
             </div>
           </div>
