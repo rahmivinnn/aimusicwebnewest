@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useState, useEffect, useRef } from "react"
-import { Music, Wand2, Heart, Play, Pause, Download, Shuffle, Volume2, RefreshCw } from "lucide-react"
+import { Music, Music2, Wand2, Heart, Play, Pause, Download, Shuffle, Volume2, RefreshCw, Compass, Library, LibraryBig } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PersistentAivaIntegration } from "@/components/persistent-aiva-integration"
 import { useToast } from "@/components/ui/use-toast"
