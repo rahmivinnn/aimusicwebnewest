@@ -64,6 +64,7 @@ export default function TextToAudioPage() {
   const [usingFallbackMusic, setUsingFallbackMusic] = useState(false)
   const [voiceEmbeddedFallback, setVoiceEmbeddedFallback] = useState(false)
   const [musicEmbeddedFallback, setMusicEmbeddedFallback] = useState(false)
+  const [songEmbeddedFallback, setSongEmbeddedFallback] = useState(false)
   const [voiceLoadingProgress, setVoiceLoadingProgress] = useState(0)
   const [musicLoadingProgress, setMusicLoadingProgress] = useState(0)
   const [quality, setQuality] = useState("high")
@@ -362,25 +363,33 @@ export default function TextToAudioPage() {
           console.log("Using provided fallback voice audio");
           tryFallbackVoice()
         } else if (voiceAudio.src.includes("api") || voiceAudio.src.includes("blob:")) {
-          // If the error is with an API URL or blob URL, try a guaranteed local fallback
-          console.log("API/blob URL failed, trying guaranteed local fallback");
-          voiceAudio.src = "/samples/sample-neutral.mp3";
-          voiceAudio.load();
-          setUsingFallbackVoice(true);
+          // If the error is with an API URL or blob URL, try our robust fallback chain
+          console.log("API/blob URL failed, trying robust fallback chain");
+          tryFallbackVoice();
         } else if (voiceAudio.src.includes("/samples/")) {
-          // If even the sample failed, try a different sample
-          console.log("Sample failed, trying alternative sample");
-          voiceAudio.src = "/samples/edm-remix-sample.mp3"; // Use a music sample as last resort
+          // If a sample failed, try external CDN
+          console.log("Sample failed, trying external CDN");
+          voiceAudio.src = "https://cdn.pixabay.com/audio/2022/11/17/audio_febc508a42.mp3";
           voiceAudio.load();
           setUsingFallbackVoice(true);
         } else {
-          // Last resort - show embedded player
-          setVoiceEmbeddedFallback(true);
-          toast({
-            title: "Using Basic Audio Player",
-            description: "Advanced audio features unavailable. Using basic player instead.",
-            variant: "warning",
-          })
+          // Try one more external CDN as last resort before showing embedded player
+          console.log("Trying last resort external CDN");
+          voiceAudio.src = "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3";
+          voiceAudio.load();
+          setUsingFallbackVoice(true);
+
+          // Set a timeout to show embedded player if this also fails
+          setTimeout(() => {
+            if (!voiceLoaded) {
+              setVoiceEmbeddedFallback(true);
+              toast({
+                title: "Using Basic Audio Player",
+                description: "Advanced audio features unavailable. Using basic player instead.",
+                variant: "warning",
+              });
+            }
+          }, 3000);
         }
       })
 
@@ -472,25 +481,33 @@ export default function TextToAudioPage() {
           console.log("Using provided fallback song audio");
           tryFallbackSong()
         } else if (songAudio.src.includes("api") || songAudio.src.includes("blob:")) {
-          // If the error is with an API URL or blob URL, try a guaranteed local fallback
-          console.log("API/blob URL failed, trying guaranteed local fallback");
-          songAudio.src = "/samples/edm-remix-sample.mp3";
-          songAudio.load();
-          setUsingSongFallback(true);
+          // If the error is with an API URL or blob URL, try our robust fallback chain
+          console.log("API/blob URL failed, trying robust fallback chain");
+          tryFallbackSong();
         } else if (songAudio.src.includes("/samples/")) {
-          // If even the sample failed, try a different sample
-          console.log("Sample failed, trying alternative sample");
-          songAudio.src = "/samples/music-neutral.mp3"; // Use a different sample as last resort
+          // If a sample failed, try external CDN
+          console.log("Sample failed, trying external CDN");
+          songAudio.src = "https://cdn.pixabay.com/audio/2022/11/17/audio_febc508a42.mp3";
           songAudio.load();
           setUsingSongFallback(true);
         } else {
-          // Last resort - show embedded player
-          setSongEmbeddedFallback(true);
-          toast({
-            title: "Using Basic Audio Player",
-            description: "Advanced audio features unavailable. Using basic player instead.",
-            variant: "warning",
-          })
+          // Try one more external CDN as last resort before showing embedded player
+          console.log("Trying last resort external CDN");
+          songAudio.src = "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3";
+          songAudio.load();
+          setUsingSongFallback(true);
+
+          // Set a timeout to show embedded player if this also fails
+          setTimeout(() => {
+            if (!songLoaded) {
+              setSongEmbeddedFallback(true);
+              toast({
+                title: "Using Basic Audio Player",
+                description: "Advanced audio features unavailable. Using basic player instead.",
+                variant: "warning",
+              });
+            }
+          }, 3000);
         }
       })
 
@@ -582,25 +599,33 @@ export default function TextToAudioPage() {
           console.log("Using provided fallback music audio");
           tryFallbackMusic()
         } else if (musicAudio.src.includes("api") || musicAudio.src.includes("blob:")) {
-          // If the error is with an API URL or blob URL, try a guaranteed local fallback
-          console.log("API/blob URL failed, trying guaranteed local fallback");
-          musicAudio.src = "/samples/music-neutral.mp3";
-          musicAudio.load();
-          setUsingFallbackMusic(true);
+          // If the error is with an API URL or blob URL, try our robust fallback chain
+          console.log("API/blob URL failed, trying robust fallback chain");
+          tryFallbackMusic();
         } else if (musicAudio.src.includes("/samples/")) {
-          // If even the sample failed, try a different sample
-          console.log("Sample failed, trying alternative sample");
-          musicAudio.src = "/samples/edm-remix-sample.mp3"; // Use a different sample as last resort
+          // If a sample failed, try external CDN
+          console.log("Sample failed, trying external CDN");
+          musicAudio.src = "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3";
           musicAudio.load();
           setUsingFallbackMusic(true);
         } else {
-          // Last resort - show embedded player
-          setMusicEmbeddedFallback(true);
-          toast({
-            title: "Using Basic Audio Player",
-            description: "Advanced audio features unavailable. Using basic player instead.",
-            variant: "warning",
-          })
+          // Try one more external CDN as last resort before showing embedded player
+          console.log("Trying last resort external CDN");
+          musicAudio.src = "https://cdn.pixabay.com/audio/2022/08/04/audio_2dde668d05.mp3";
+          musicAudio.load();
+          setUsingFallbackMusic(true);
+
+          // Set a timeout to show embedded player if this also fails
+          setTimeout(() => {
+            if (!musicLoaded) {
+              setMusicEmbeddedFallback(true);
+              toast({
+                title: "Using Basic Audio Player",
+                description: "Advanced audio features unavailable. Using basic player instead.",
+                variant: "warning",
+              });
+            }
+          }, 3000);
         }
       })
 
@@ -637,38 +662,92 @@ export default function TextToAudioPage() {
     setVoiceLoaded(false)
     setVoiceLoadingProgress(0)
 
-    // Use a guaranteed working fallback if the provided one is not available
-    const fallbackUrl = fallbackVoiceAudio || "/samples/sample-neutral.mp3";
-    console.log(`Trying fallback voice URL: ${fallbackUrl}`)
+    // List of guaranteed working fallbacks in order of preference
+    const guaranteedFallbacks = [
+      fallbackVoiceAudio,
+      "/samples/sample-neutral.mp3",
+      "/samples/edm-remix-sample.mp3",
+      "https://cdn.pixabay.com/audio/2022/11/17/audio_febc508a42.mp3", // External CDN fallback
+      "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3", // Alternative external fallback
+    ].filter(Boolean); // Remove any null/undefined values
+
+    console.log(`Trying fallback voice from ${guaranteedFallbacks.length} options`);
 
     // Set enhanced loading attributes
     voiceAudioRef.current.preload = "auto";
     voiceAudioRef.current.crossOrigin = "anonymous";
 
-    // Set source and load
-    voiceAudioRef.current.src = fallbackUrl;
-    voiceAudioRef.current.load();
+    // Try the first fallback
+    let currentFallbackIndex = 0;
+    const tryNextFallback = () => {
+      if (currentFallbackIndex < guaranteedFallbacks.length) {
+        const fallbackUrl = guaranteedFallbacks[currentFallbackIndex];
+        console.log(`Trying fallback voice URL (${currentFallbackIndex + 1}/${guaranteedFallbacks.length}): ${fallbackUrl}`);
 
-    // Set a timeout to handle cases where the fallback also fails
-    const timeoutId = setTimeout(() => {
-      if (!voiceLoaded) {
-        console.warn("Fallback voice loading timeout, trying guaranteed sample");
-        if (voiceAudioRef.current) {
-          voiceAudioRef.current.src = "/samples/sample-neutral.mp3";
-          voiceAudioRef.current.load();
-        }
+        voiceAudioRef.current.src = fallbackUrl;
+        voiceAudioRef.current.load();
+        currentFallbackIndex++;
+      } else {
+        // If all fallbacks fail, show embedded player
+        console.error("All voice fallbacks failed");
+        setVoiceEmbeddedFallback(true);
+        setIsRetryingVoice(false);
+
+        toast({
+          title: "Using Basic Audio Player",
+          description: "Advanced audio features unavailable. Using basic player instead.",
+          variant: "warning",
+        });
       }
-    }, 5000);
+    };
+
+    // Set up error handler to try next fallback
+    const errorHandler = () => {
+      console.warn(`Fallback ${currentFallbackIndex} failed, trying next`);
+      tryNextFallback();
+    };
+
+    // Set up success handler
+    const successHandler = () => {
+      console.log(`Fallback ${currentFallbackIndex} loaded successfully`);
+      voiceAudioRef.current.removeEventListener('error', errorHandler);
+      voiceAudioRef.current.removeEventListener('canplaythrough', successHandler);
+      setIsRetryingVoice(false);
+    };
+
+    // Add event listeners
+    voiceAudioRef.current.addEventListener('error', errorHandler);
+    voiceAudioRef.current.addEventListener('canplaythrough', successHandler);
+
+    // Start the fallback chain
+    tryNextFallback();
 
     toast({
       title: "Retrying Voice",
       description: "Using fallback voice sample...",
-    })
+    });
 
-    setTimeout(() => {
-      setIsRetryingVoice(false)
+    // Set a timeout to ensure we don't get stuck
+    const timeoutId = setTimeout(() => {
+      if (!voiceLoaded) {
+        console.warn("All fallbacks timed out, using external CDN");
+        if (voiceAudioRef.current) {
+          voiceAudioRef.current.removeEventListener('error', errorHandler);
+          voiceAudioRef.current.removeEventListener('canplaythrough', successHandler);
+          voiceAudioRef.current.src = "https://cdn.pixabay.com/audio/2022/11/17/audio_febc508a42.mp3";
+          voiceAudioRef.current.load();
+          setIsRetryingVoice(false);
+        }
+      }
+    }, 10000);
+
+    return () => {
       clearTimeout(timeoutId);
-    }, 1000)
+      if (voiceAudioRef.current) {
+        voiceAudioRef.current.removeEventListener('error', errorHandler);
+        voiceAudioRef.current.removeEventListener('canplaythrough', successHandler);
+      }
+    };
   }, [fallbackVoiceAudio, voiceLoaded])
 
   // Try fallback song with enhanced reliability
@@ -679,36 +758,91 @@ export default function TextToAudioPage() {
     setSongLoaded(false)
     setSongLoadingProgress(0)
 
-    // Use a guaranteed working fallback if the provided one is not available
-    const fallbackUrl = fallbackSongUrl || "/samples/edm-remix-sample.mp3";
-    console.log(`Trying fallback song URL: ${fallbackUrl}`)
+    // List of guaranteed working fallbacks in order of preference
+    const guaranteedFallbacks = [
+      fallbackSongUrl,
+      "/samples/edm-remix-sample.mp3",
+      "/samples/music-neutral.mp3",
+      "https://cdn.pixabay.com/audio/2022/11/17/audio_febc508a42.mp3", // External CDN fallback
+      "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3", // Alternative external fallback
+      "https://cdn.pixabay.com/audio/2022/08/04/audio_2dde668d05.mp3", // Third external fallback
+    ].filter(Boolean); // Remove any null/undefined values
+
+    console.log(`Trying fallback song from ${guaranteedFallbacks.length} options`);
 
     // Set enhanced loading attributes
     songAudioRef.current.preload = "auto";
     songAudioRef.current.crossOrigin = "anonymous";
 
-    // Set source and load
-    songAudioRef.current.src = fallbackUrl;
-    songAudioRef.current.load();
+    // Try the first fallback
+    let currentFallbackIndex = 0;
+    const tryNextFallback = () => {
+      if (currentFallbackIndex < guaranteedFallbacks.length) {
+        const fallbackUrl = guaranteedFallbacks[currentFallbackIndex];
+        console.log(`Trying fallback song URL (${currentFallbackIndex + 1}/${guaranteedFallbacks.length}): ${fallbackUrl}`);
 
-    // Set a timeout to handle cases where the fallback also fails
-    const timeoutId = setTimeout(() => {
-      if (!songLoaded) {
-        console.warn("Fallback song loading timeout, trying guaranteed sample");
-        if (songAudioRef.current) {
-          songAudioRef.current.src = "/samples/edm-remix-sample.mp3";
-          songAudioRef.current.load();
-        }
+        songAudioRef.current.src = fallbackUrl;
+        songAudioRef.current.load();
+        currentFallbackIndex++;
+      } else {
+        // If all fallbacks fail, show embedded player
+        console.error("All song fallbacks failed");
+        setSongEmbeddedFallback(true);
+
+        toast({
+          title: "Using Basic Audio Player",
+          description: "Advanced audio features unavailable. Using basic player instead.",
+          variant: "warning",
+        });
       }
-    }, 5000);
+    };
+
+    // Set up error handler to try next fallback
+    const errorHandler = () => {
+      console.warn(`Fallback ${currentFallbackIndex} failed, trying next`);
+      tryNextFallback();
+    };
+
+    // Set up success handler
+    const successHandler = () => {
+      console.log(`Fallback ${currentFallbackIndex} loaded successfully`);
+      songAudioRef.current.removeEventListener('error', errorHandler);
+      songAudioRef.current.removeEventListener('canplaythrough', successHandler);
+    };
+
+    // Add event listeners
+    songAudioRef.current.addEventListener('error', errorHandler);
+    songAudioRef.current.addEventListener('canplaythrough', successHandler);
+
+    // Start the fallback chain
+    tryNextFallback();
 
     toast({
       title: "Using Fallback Song",
       description: "The generated song couldn't be loaded. Using a fallback song instead.",
       variant: "warning",
-    })
+    });
 
-    return () => clearTimeout(timeoutId);
+    // Set a timeout to ensure we don't get stuck
+    const timeoutId = setTimeout(() => {
+      if (!songLoaded) {
+        console.warn("All fallbacks timed out, using external CDN");
+        if (songAudioRef.current) {
+          songAudioRef.current.removeEventListener('error', errorHandler);
+          songAudioRef.current.removeEventListener('canplaythrough', successHandler);
+          songAudioRef.current.src = "https://cdn.pixabay.com/audio/2022/11/17/audio_febc508a42.mp3";
+          songAudioRef.current.load();
+        }
+      }
+    }, 10000);
+
+    return () => {
+      clearTimeout(timeoutId);
+      if (songAudioRef.current) {
+        songAudioRef.current.removeEventListener('error', errorHandler);
+        songAudioRef.current.removeEventListener('canplaythrough', successHandler);
+      }
+    };
   }, [fallbackSongUrl, songLoaded])
 
   // Try fallback music with enhanced reliability
@@ -720,38 +854,93 @@ export default function TextToAudioPage() {
     setMusicLoaded(false)
     setMusicLoadingProgress(0)
 
-    // Use a guaranteed working fallback if the provided one is not available
-    const fallbackUrl = fallbackMusicAudio || "/samples/music-neutral.mp3";
-    console.log(`Trying fallback music URL: ${fallbackUrl}`)
+    // List of guaranteed working fallbacks in order of preference
+    const guaranteedFallbacks = [
+      fallbackMusicAudio,
+      "/samples/music-neutral.mp3",
+      "/samples/edm-remix-sample.mp3",
+      "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3", // External CDN fallback
+      "https://cdn.pixabay.com/audio/2022/08/04/audio_2dde668d05.mp3", // Alternative external fallback
+      "https://cdn.pixabay.com/audio/2022/10/25/audio_864e7672de.mp3", // Third external fallback
+    ].filter(Boolean); // Remove any null/undefined values
+
+    console.log(`Trying fallback music from ${guaranteedFallbacks.length} options`);
 
     // Set enhanced loading attributes
     musicAudioRef.current.preload = "auto";
     musicAudioRef.current.crossOrigin = "anonymous";
 
-    // Set source and load
-    musicAudioRef.current.src = fallbackUrl;
-    musicAudioRef.current.load();
+    // Try the first fallback
+    let currentFallbackIndex = 0;
+    const tryNextFallback = () => {
+      if (currentFallbackIndex < guaranteedFallbacks.length) {
+        const fallbackUrl = guaranteedFallbacks[currentFallbackIndex];
+        console.log(`Trying fallback music URL (${currentFallbackIndex + 1}/${guaranteedFallbacks.length}): ${fallbackUrl}`);
 
-    // Set a timeout to handle cases where the fallback also fails
-    const timeoutId = setTimeout(() => {
-      if (!musicLoaded) {
-        console.warn("Fallback music loading timeout, trying guaranteed sample");
-        if (musicAudioRef.current) {
-          musicAudioRef.current.src = "/samples/music-neutral.mp3";
-          musicAudioRef.current.load();
-        }
+        musicAudioRef.current.src = fallbackUrl;
+        musicAudioRef.current.load();
+        currentFallbackIndex++;
+      } else {
+        // If all fallbacks fail, show embedded player
+        console.error("All music fallbacks failed");
+        setMusicEmbeddedFallback(true);
+        setIsRetryingMusic(false);
+
+        toast({
+          title: "Using Basic Audio Player",
+          description: "Advanced audio features unavailable. Using basic player instead.",
+          variant: "warning",
+        });
       }
-    }, 5000);
+    };
+
+    // Set up error handler to try next fallback
+    const errorHandler = () => {
+      console.warn(`Fallback ${currentFallbackIndex} failed, trying next`);
+      tryNextFallback();
+    };
+
+    // Set up success handler
+    const successHandler = () => {
+      console.log(`Fallback ${currentFallbackIndex} loaded successfully`);
+      musicAudioRef.current.removeEventListener('error', errorHandler);
+      musicAudioRef.current.removeEventListener('canplaythrough', successHandler);
+      setIsRetryingMusic(false);
+    };
+
+    // Add event listeners
+    musicAudioRef.current.addEventListener('error', errorHandler);
+    musicAudioRef.current.addEventListener('canplaythrough', successHandler);
+
+    // Start the fallback chain
+    tryNextFallback();
 
     toast({
       title: "Retrying Music",
       description: "Using fallback music sample...",
-    })
+    });
 
-    setTimeout(() => {
-      setIsRetryingMusic(false)
+    // Set a timeout to ensure we don't get stuck
+    const timeoutId = setTimeout(() => {
+      if (!musicLoaded) {
+        console.warn("All fallbacks timed out, using external CDN");
+        if (musicAudioRef.current) {
+          musicAudioRef.current.removeEventListener('error', errorHandler);
+          musicAudioRef.current.removeEventListener('canplaythrough', successHandler);
+          musicAudioRef.current.src = "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3";
+          musicAudioRef.current.load();
+          setIsRetryingMusic(false);
+        }
+      }
+    }, 10000);
+
+    return () => {
       clearTimeout(timeoutId);
-    }, 1000)
+      if (musicAudioRef.current) {
+        musicAudioRef.current.removeEventListener('error', errorHandler);
+        musicAudioRef.current.removeEventListener('canplaythrough', successHandler);
+      }
+    };
   }, [fallbackMusicAudio, musicLoaded])
 
   // Set voice audio source when generated
@@ -2178,7 +2367,7 @@ export default function TextToAudioPage() {
                         <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg voice-player">
                           <p className="text-sm text-zinc-300 mb-2">Professional voice audio:</p>
                           <audio
-                            src={fallbackVoiceAudio || "/samples/sample-neutral.mp3"}
+                            src={"https://cdn.pixabay.com/audio/2022/11/17/audio_febc508a42.mp3"}
                             controls
                             className="w-full"
                             preload="auto"
@@ -2195,19 +2384,6 @@ export default function TextToAudioPage() {
                               console.log("Voice metadata loaded, duration:", audio.duration);
                               setVoiceLoaded(true);
                               setVoiceLoadError(false);
-
-                              // If duration is still invalid after forcing calculation, try to reload
-                              setTimeout(() => {
-                                if (audio.duration === Infinity || isNaN(audio.duration)) {
-                                  console.log("Voice duration still invalid, trying alternative sample");
-                                  audio.src = "/samples/edm-remix-sample.mp3";
-                                  audio.load();
-                                }
-                              }, 500);
-                            }}
-                            onDurationChange={(e) => {
-                              // Additional event to catch duration changes
-                              console.log("Voice duration changed:", e.currentTarget.duration);
                             }}
                             onCanPlay={() => {
                               console.log("Voice can play now");
@@ -2220,15 +2396,22 @@ export default function TextToAudioPage() {
                               }
                             }}
                             onError={(e) => {
-                              console.error("Fallback voice error:", e);
-                              // Try a different sample if the fallback fails
-                              const audio = e.currentTarget;
-                              if (audio.src.includes("/samples/")) {
-                                // Try a different sample
-                                console.log("Fallback sample failed, trying EDM sample");
-                                audio.src = "/samples/edm-remix-sample.mp3";
-                                audio.load();
-                              }
+                              console.error("Embedded voice player error:", e);
+                              // Try alternative CDN fallbacks
+                              const fallbacks = [
+                                "https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3",
+                                "https://cdn.pixabay.com/audio/2022/08/04/audio_2dde668d05.mp3",
+                                "https://cdn.pixabay.com/audio/2022/10/25/audio_864e7672de.mp3",
+                                "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+                              ];
+
+                              // Try the next fallback
+                              const currentSrc = e.currentTarget.src;
+                              const currentIndex = fallbacks.findIndex(url => currentSrc.includes(url));
+                              const nextIndex = (currentIndex + 1) % fallbacks.length;
+
+                              e.currentTarget.src = fallbacks[nextIndex];
+                              e.currentTarget.load();
                             }}
                             onPlay={() => setIsPlaying(true)}
                             onPause={() => setIsPlaying(false)}
@@ -2243,7 +2426,7 @@ export default function TextToAudioPage() {
                         <div className="mt-4 p-3 bg-zinc-800/50 rounded-lg music-player">
                           <p className="text-sm text-zinc-300 mb-2">Professional background music:</p>
                           <audio
-                            src={fallbackMusicAudio || "/samples/music-neutral.mp3"}
+                            src={"https://cdn.pixabay.com/audio/2022/05/27/audio_1808fbf07a.mp3"}
                             controls
                             className="w-full"
                             preload="auto"
@@ -2260,19 +2443,6 @@ export default function TextToAudioPage() {
                               console.log("Music metadata loaded, duration:", audio.duration);
                               setMusicLoaded(true);
                               setMusicLoadError(false);
-
-                              // If duration is still invalid after forcing calculation, try to reload
-                              setTimeout(() => {
-                                if (audio.duration === Infinity || isNaN(audio.duration)) {
-                                  console.log("Music duration still invalid, trying alternative sample");
-                                  audio.src = "/samples/edm-remix-sample.mp3";
-                                  audio.load();
-                                }
-                              }, 500);
-                            }}
-                            onDurationChange={(e) => {
-                              // Additional event to catch duration changes
-                              console.log("Music duration changed:", e.currentTarget.duration);
                             }}
                             onCanPlay={() => {
                               console.log("Music can play now");
@@ -2285,15 +2455,22 @@ export default function TextToAudioPage() {
                               }
                             }}
                             onError={(e) => {
-                              console.error("Fallback music error:", e);
-                              // Try a different sample if the fallback fails
-                              const audio = e.currentTarget;
-                              if (audio.src.includes("/samples/")) {
-                                // Try a different sample
-                                console.log("Fallback sample failed, trying EDM sample");
-                                audio.src = "/samples/edm-remix-sample.mp3";
-                                audio.load();
-                              }
+                              console.error("Embedded music player error:", e);
+                              // Try alternative CDN fallbacks
+                              const fallbacks = [
+                                "https://cdn.pixabay.com/audio/2022/08/04/audio_2dde668d05.mp3",
+                                "https://cdn.pixabay.com/audio/2022/10/25/audio_864e7672de.mp3",
+                                "https://cdn.pixabay.com/audio/2022/11/17/audio_febc508a42.mp3",
+                                "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
+                              ];
+
+                              // Try the next fallback
+                              const currentSrc = e.currentTarget.src;
+                              const currentIndex = fallbacks.findIndex(url => currentSrc.includes(url));
+                              const nextIndex = (currentIndex + 1) % fallbacks.length;
+
+                              e.currentTarget.src = fallbacks[nextIndex];
+                              e.currentTarget.load();
                             }}
                             onPlay={() => setIsPlaying(true)}
                             onPause={() => setIsPlaying(false)}
