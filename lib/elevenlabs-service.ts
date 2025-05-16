@@ -1,35 +1,35 @@
-"use server"
+"use server";
 
-import { verifyAudioQuality } from "./audio-quality-validator"
+import { verifyAudioQuality } from "./audio-quality-validator";
 
 // Eleven Labs API key
-const ELEVENLABS_API_KEY = "sk_ee1207b428511380b8ccf3cc96216cb71a00c4715e5a054b"
+const ELEVENLABS_API_KEY = "sk_ee1207b428511380b8ccf3cc96216cb71a00c4715e5a054b";
 // Eleven Labs API URL
-const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1"
+const ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1";
 
 // Define types for the Eleven Labs service
 type ElevenLabsOptions = {
-  text: string
-  voice_id?: string
-  model_id?: string
+  text: string;
+  voice_id?: string;
+  model_id?: string;
   voice_settings?: {
-    stability?: number
-    similarity_boost?: number
-    style?: number
-    use_speaker_boost?: boolean
-    speed?: number
-  }
-  output_format?: string
-}
+    stability?: number;
+    similarity_boost?: number;
+    style?: number;
+    use_speaker_boost?: boolean;
+    speed?: number;
+  };
+  output_format?: string;
+};
 
 type ElevenLabsResponse = {
-  audio_url: string
-  seed?: number
-  duration?: number
-  blob_size?: number
-  timestamp?: string
-  mime_type?: string
-}
+  audio_url: string;
+  seed?: number;
+  duration?: number;
+  blob_size?: number;
+  timestamp?: string;
+  mime_type?: string;
+};
 
 // Voice mapping for different voice types
 const VOICE_MAPPING = {
@@ -61,14 +61,14 @@ const VOICE_MAPPING = {
   // Music-optimized voices
   "music-female": "z9fAnlkpzviPz146aGWa", // Serena - Good for music
   "music-male": "SOYHLrjzK2X1ezoPC6cr", // Josh - Good for music
-}
+};
 
 // Model mapping for different quality levels
 const MODEL_MAPPING = {
   high: "eleven_multilingual_v2", // Best quality
   medium: "eleven_turbo_v2_5", // Good balance
   low: "eleven_flash_v2_5", // Fastest
-}
+};
 
 /**
  * Generate audio using Eleven Labs API
@@ -81,9 +81,9 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
       model_id = "eleven_multilingual_v2", // Default to highest quality
       voice_settings,
       output_format = "mp3_44100_128"
-    } = options
+    } = options;
 
-    console.log(`Generating audio with Eleven Labs: "${text.substring(0, 50)}..."`)
+    console.log(`Generating audio with Eleven Labs: "${text.substring(0, 50)}..."`);
 
     // Prepare the request body
     const requestBody = {
@@ -91,7 +91,7 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
       model_id,
       voice_settings,
       output_format
-    }
+    };
 
     // Make the API call
     const response = await fetch(`${ELEVENLABS_API_URL}/text-to-speech/${voice_id}`, {
@@ -104,46 +104,53 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
       body: JSON.stringify(requestBody),
       // Add timeout to prevent hanging requests
       signal: AbortSignal.timeout(60000), // 60 second timeout
-    })
+    });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      throw new Error(`Eleven Labs API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`)
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`Eleven Labs API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
     }
 
     // Get the audio data as a blob
-    const audioBlob = await response.blob()
+    const audioBlob = await response.blob();
 
     // Check if the blob is valid (not empty)
     if (audioBlob.size === 0) {
-      console.error("Eleven Labs returned an empty audio blob")
-      throw new Error("Generated audio is empty. Please try again with different parameters.")
+      console.error("Eleven Labs returned an empty audio blob");
+      throw new Error("Generated audio is empty. Please try again with different parameters.");
     }
 
     // Log the blob size for debugging
-    console.log(`Audio blob size: ${audioBlob.size} bytes, type: ${audioBlob.type}`)
+    console.log(`Audio blob size: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
 
     // Check if the blob has the correct MIME type
     if (!audioBlob.type.includes('audio/')) {
-      console.warn(`Blob has unexpected MIME type: ${audioBlob.type}, forcing audio/mpeg`)
+      console.warn(`Blob has unexpected MIME type: ${audioBlob.type}, forcing audio/mpeg`);
       // Create a new blob with the correct MIME type
-      const newBlob = new Blob([await audioBlob.arrayBuffer()], { type: 'audio/mpeg' })
-      console.log(`Created new blob with size: ${newBlob.size} bytes, type: ${newBlob.type}`)
+      const newBlob = new Blob([await audioBlob.arrayBuffer()], { type: 'audio/mpeg' });
+      console.log(`Created new blob with size: ${newBlob.size} bytes, type: ${newBlob.type}`);
 
       // Create a URL for the audio blob
-      const audioUrl = URL.createObjectURL(newBlob)
-      return { audio_url: audioUrl, blob_size: newBlob.size, duration: 30 }
+      const audioUrl = URL.createObjectURL(newBlob);
+      return { audio_url: audioUrl, blob_size: newBlob.size, duration: 30 };
     }
 
     // Create a URL for the audio blob
-    const audioUrl = URL.createObjectURL(audioBlob)
+    const audioUrl = URL.createObjectURL(audioBlob);
 
-    // Create an audio element to get the duration
-    const audio = new Audio()
-    audio.src = audioUrl
-
-    // For remix generation, we'll use a more aggressive approach to duration detection
+    // For server-side execution, we need to check if Audio is available
     let duration = 30; // Default duration
+
+    // Check if we're in a browser environment where Audio is available
+    const isClient = typeof window !== 'undefined' && typeof Audio !== 'undefined';
+
+    if (isClient) {
+      // Only create an Audio element in browser environments
+      const audio = new Audio();
+      audio.src = audioUrl;
+
+      // Client-side duration detection code would go here
+    }
 
     try {
       // Try to estimate duration based on blob size and bit rate
@@ -162,96 +169,21 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
       console.warn("Error estimating duration from blob size:", error);
     }
 
-    // Also try the standard approach with timeout
-    try {
-      const metadataDuration = await Promise.race([
-        new Promise<number>((resolve, reject) => {
-          // Set up event listeners
-          const handleLoadedMetadata = () => {
-            // Check if duration is valid
-            if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
-              console.log(`Audio metadata loaded, duration: ${audio.duration}`);
-              resolve(audio.duration);
-            } else {
-              console.warn("Invalid duration in loadedmetadata event:", audio.duration);
-              // Try forcing duration calculation
-              try {
-                audio.currentTime = 1e101;
-                setTimeout(() => {
-                  audio.currentTime = 0;
-                  if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
-                    console.log(`Duration after forcing calculation: ${audio.duration}`);
-                    resolve(audio.duration);
-                  } else {
-                    console.warn("Still invalid duration after forcing calculation");
-                    reject(new Error("Invalid duration"));
-                  }
-                }, 300);
-              } catch (error) {
-                console.warn("Error forcing duration calculation:", error);
-                reject(error);
-              }
-            }
-          };
+    // In browser environments, we would try the standard approach with timeout
+    // But since we're in a server environment, we'll skip this part
 
-          const handleError = (e: Event) => {
-            console.error("Error loading audio metadata:", e);
-            reject(new Error("Audio metadata loading error"));
-          };
-
-          // Add event listeners
-          audio.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
-          audio.addEventListener('error', handleError, { once: true });
-
-          // Also listen for durationchange event
-          audio.addEventListener('durationchange', () => {
-            console.log(`Duration changed to: ${audio.duration}`);
-          });
-
-          // Load the audio
-          audio.load();
-
-          // Try playing a tiny bit to force metadata loading
-          try {
-            audio.volume = 0.001; // Nearly silent
-            audio.play().then(() => {
-              setTimeout(() => {
-                audio.pause();
-                audio.currentTime = 0;
-              }, 100);
-            }).catch(error => {
-              console.warn("Error playing audio to force metadata loading:", error);
-            });
-          } catch (playError) {
-            console.warn("Error in play attempt:", playError);
-          }
-        }),
-        // Add a timeout to prevent hanging
-        new Promise<number>((_, reject) => setTimeout(() => {
-          console.warn("Timeout waiting for audio metadata");
-          reject(new Error("Metadata loading timeout"));
-        }, 8000))
-      ]);
-
-      // If we got a valid duration from metadata, use it
-      if (metadataDuration && metadataDuration > 0) {
-        duration = metadataDuration;
-      }
-    } catch (metadataError) {
-      console.warn("Error getting duration from metadata:", metadataError);
-      // Continue with our estimated or default duration
-    }
+    // For server-side, we'll just use the estimated duration from blob size
 
     // Validate the audio URL by trying to fetch a small part of it
     let urlIsValid = true;
     try {
-      const testFetch = await fetch(audioUrl, { method: 'HEAD' })
+      const testFetch = await fetch(audioUrl, { method: 'HEAD' });
       if (!testFetch.ok) {
-        console.warn(`Audio URL validation failed: ${testFetch.status} ${testFetch.statusText}`)
+        console.warn(`Audio URL validation failed: ${testFetch.status} ${testFetch.statusText}`);
         urlIsValid = false;
       }
     } catch (error) {
-      console.warn("Error validating audio URL:", error)
+      console.warn("Error validating audio URL:", error);
       urlIsValid = false;
     }
 
@@ -285,11 +217,11 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
       audio_url: audioUrl,
       duration: duration || 30, // Use our calculated or default duration
       blob_size: audioBlob.size, // Include blob size for debugging
-      timestamp: new Date().toISOString(), // Add timestamp for debugging
-    }
+      timestamp: new Date().toISOString() // Add timestamp for debugging
+    };
   } catch (error) {
-    console.error("Error generating audio with Eleven Labs:", error)
-    throw error
+    console.error("Error generating audio with Eleven Labs:", error);
+    throw error;
   }
 }
 
@@ -304,7 +236,7 @@ export async function generateTextToSpeech(options: {
   randomizeVoice?: boolean
 }): Promise<string> {
   try {
-    const { text, voice_type = "neutral", emotion = "neutral", quality = "high", randomizeVoice = false } = options
+    const { text, voice_type = "neutral", emotion = "neutral", quality = "high", randomizeVoice = false } = options;
 
     // Map voice type to Eleven Labs voice ID
     let voice_id: string;
@@ -328,7 +260,7 @@ export async function generateTextToSpeech(options: {
     }
 
     // Map quality to model ID
-    const model_id = MODEL_MAPPING[quality as keyof typeof MODEL_MAPPING] || MODEL_MAPPING.high
+    const model_id = MODEL_MAPPING[quality as keyof typeof MODEL_MAPPING] || MODEL_MAPPING.high;
 
     // Adjust voice settings based on emotion
     let voice_settings: any = {
@@ -337,35 +269,35 @@ export async function generateTextToSpeech(options: {
       style: 0.0,
       use_speaker_boost: true,
       speed: 1.0
-    }
+    };
 
     // Adjust settings based on emotion
     switch (emotion) {
       case "cheerful":
-        voice_settings.stability = 0.3
-        voice_settings.style = 0.7
-        voice_settings.speed = 1.1
-        break
+        voice_settings.stability = 0.3;
+        voice_settings.style = 0.7;
+        voice_settings.speed = 1.1;
+        break;
       case "sad":
-        voice_settings.stability = 0.8
-        voice_settings.style = 0.4
-        voice_settings.speed = 0.9
-        break
+        voice_settings.stability = 0.8;
+        voice_settings.style = 0.4;
+        voice_settings.speed = 0.9;
+        break;
       case "professional":
-        voice_settings.stability = 0.7
-        voice_settings.style = 0.2
-        voice_settings.speed = 1.0
-        break
+        voice_settings.stability = 0.7;
+        voice_settings.style = 0.2;
+        voice_settings.speed = 1.0;
+        break;
       case "excited":
-        voice_settings.stability = 0.2
-        voice_settings.style = 0.9
-        voice_settings.speed = 1.2
-        break
+        voice_settings.stability = 0.2;
+        voice_settings.style = 0.9;
+        voice_settings.speed = 1.2;
+        break;
       case "calm":
-        voice_settings.stability = 0.9
-        voice_settings.style = 0.3
-        voice_settings.speed = 0.95
-        break
+        voice_settings.stability = 0.9;
+        voice_settings.style = 0.3;
+        voice_settings.speed = 0.95;
+        break;
     }
 
     // Generate the audio
@@ -374,12 +306,12 @@ export async function generateTextToSpeech(options: {
       voice_id,
       model_id,
       voice_settings,
-    })
+    });
 
-    return result.audio_url
+    return result.audio_url;
   } catch (error) {
-    console.error("Error generating text-to-speech:", error)
-    throw error
+    console.error("Error generating text-to-speech:", error);
+    throw error;
   }
 }
 
@@ -389,35 +321,35 @@ export async function generateTextToSpeech(options: {
 export async function generateBackgroundMusic(emotion: string, genre?: string, isRemix: boolean = false): Promise<string> {
   try {
     // For music generation, we'll use a specific prompt based on emotion and genre
-    let prompt = ""
+    let prompt = "";
 
     if (isRemix) {
       // Enhanced prompt specifically for remixes with more detailed instructions
       prompt = `Create a professional ${genre || 'electronic'} remix with ${emotion} mood.
 Include strong beats, clear melody, and dynamic structure with proper intro, build-up, drop, and outro sections.
 The remix should have a tempo of 128 BPM with punchy kick drums, crisp hi-hats, and deep bass.
-Make it sound like a professional studio production with perfect mastering, clear stereo imaging, and balanced frequency spectrum.`
+Make it sound like a professional studio production with perfect mastering, clear stereo imaging, and balanced frequency spectrum.`;
     } else {
       // Standard prompt for background music
-      prompt = `Create background music that is ${emotion}`
+      prompt = `Create background music that is ${emotion}`;
       if (genre) {
-        prompt += ` in the ${genre} genre`
+        prompt += ` in the ${genre} genre`;
       }
 
       // Add quality instructions to the prompt for non-remix music
-      prompt += `. Make it high quality, professionally mastered audio with clear sound.`
+      prompt += `. Make it high quality, professionally mastered audio with clear sound.`;
     }
 
-    console.log(`Generating ${isRemix ? 'remix' : 'background music'} with prompt: "${prompt}"`)
+    console.log(`Generating ${isRemix ? 'remix' : 'background music'} with prompt: "${prompt}"`);
 
     // Use a specific voice optimized for music
     // For remixes, use a different voice that might work better for instrumental music
     const voice_id = isRemix
       ? "SOYHLrjzK2X1ezoPC6cr" // Josh - better for remixes
-      : "z9fAnlkpzviPz146aGWa" // Serena - good for music
+      : "z9fAnlkpzviPz146aGWa"; // Serena - good for music
 
     // Use the multilingual model for best quality
-    const model_id = "eleven_multilingual_v2"
+    const model_id = "eleven_multilingual_v2";
 
     // Voice settings optimized for music generation
     const voice_settings = isRemix
