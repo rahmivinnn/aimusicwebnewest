@@ -27,6 +27,8 @@ type ElevenLabsResponse = {
   seed?: number
   duration?: number
   blob_size?: number
+  timestamp?: string
+  mime_type?: string
 }
 
 // Voice mapping for different voice types
@@ -119,7 +121,19 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
     }
 
     // Log the blob size for debugging
-    console.log(`Audio blob size: ${audioBlob.size} bytes`)
+    console.log(`Audio blob size: ${audioBlob.size} bytes, type: ${audioBlob.type}`)
+
+    // Check if the blob has the correct MIME type
+    if (!audioBlob.type.includes('audio/')) {
+      console.warn(`Blob has unexpected MIME type: ${audioBlob.type}, forcing audio/mpeg`)
+      // Create a new blob with the correct MIME type
+      const newBlob = new Blob([await audioBlob.arrayBuffer()], { type: 'audio/mpeg' })
+      console.log(`Created new blob with size: ${newBlob.size} bytes, type: ${newBlob.type}`)
+
+      // Create a URL for the audio blob
+      const audioUrl = URL.createObjectURL(newBlob)
+      return { audio_url: audioUrl, blob_size: newBlob.size, duration: 30 }
+    }
 
     // Create a URL for the audio blob
     const audioUrl = URL.createObjectURL(audioBlob)
@@ -128,57 +142,150 @@ export async function generateElevenLabsAudio(options: ElevenLabsOptions): Promi
     const audio = new Audio()
     audio.src = audioUrl
 
-    // Wait for metadata to load to get duration with a timeout
-    const duration = await Promise.race([
-      new Promise<number>((resolve) => {
-        audio.addEventListener('loadedmetadata', () => {
-          // Check if duration is valid
-          if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
-            console.warn("Invalid audio duration, trying to force duration calculation")
-            // Force duration calculation for problematic browsers
-            audio.currentTime = 1e101
-            setTimeout(() => {
-              audio.currentTime = 0
-              // Check again after forcing calculation
-              if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
-                console.warn("Still couldn't determine duration, using default")
-                resolve(30)
-              } else {
-                resolve(audio.duration)
+    // For remix generation, we'll use a more aggressive approach to duration detection
+    let duration = 30; // Default duration
+
+    try {
+      // Try to estimate duration based on blob size and bit rate
+      // Assuming 128 kbps MP3, calculate approximate duration
+      const bitRateKbps = 128; // 128 kbps
+      const bitRateBytesPerSecond = (bitRateKbps * 1000) / 8;
+      const estimatedDuration = audioBlob.size / bitRateBytesPerSecond;
+
+      console.log(`Estimated duration based on blob size: ${estimatedDuration.toFixed(2)} seconds`);
+
+      // If the estimated duration seems reasonable, use it
+      if (estimatedDuration > 1 && estimatedDuration < 300) {
+        duration = estimatedDuration;
+      }
+    } catch (error) {
+      console.warn("Error estimating duration from blob size:", error);
+    }
+
+    // Also try the standard approach with timeout
+    try {
+      const metadataDuration = await Promise.race([
+        new Promise<number>((resolve, reject) => {
+          // Set up event listeners
+          const handleLoadedMetadata = () => {
+            // Check if duration is valid
+            if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+              console.log(`Audio metadata loaded, duration: ${audio.duration}`);
+              resolve(audio.duration);
+            } else {
+              console.warn("Invalid duration in loadedmetadata event:", audio.duration);
+              // Try forcing duration calculation
+              try {
+                audio.currentTime = 1e101;
+                setTimeout(() => {
+                  audio.currentTime = 0;
+                  if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+                    console.log(`Duration after forcing calculation: ${audio.duration}`);
+                    resolve(audio.duration);
+                  } else {
+                    console.warn("Still invalid duration after forcing calculation");
+                    reject(new Error("Invalid duration"));
+                  }
+                }, 300);
+              } catch (error) {
+                console.warn("Error forcing duration calculation:", error);
+                reject(error);
               }
-            }, 200)
-          } else {
-            resolve(audio.duration)
+            }
+          };
+
+          const handleError = (e: Event) => {
+            console.error("Error loading audio metadata:", e);
+            reject(new Error("Audio metadata loading error"));
+          };
+
+          // Add event listeners
+          audio.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true });
+          audio.addEventListener('error', handleError, { once: true });
+
+          // Also listen for durationchange event
+          audio.addEventListener('durationchange', () => {
+            console.log(`Duration changed to: ${audio.duration}`);
+          });
+
+          // Load the audio
+          audio.load();
+
+          // Try playing a tiny bit to force metadata loading
+          try {
+            audio.volume = 0.001; // Nearly silent
+            audio.play().then(() => {
+              setTimeout(() => {
+                audio.pause();
+                audio.currentTime = 0;
+              }, 100);
+            }).catch(error => {
+              console.warn("Error playing audio to force metadata loading:", error);
+            });
+          } catch (playError) {
+            console.warn("Error in play attempt:", playError);
           }
-        })
-        audio.addEventListener('error', (e) => {
-          console.error("Error loading audio metadata:", e)
-          resolve(30) // Default to 30 seconds if error
-        })
-        audio.load()
-      }),
-      // Add a timeout to prevent hanging
-      new Promise<number>((resolve) => setTimeout(() => {
-        console.warn("Timeout waiting for audio metadata, using default duration")
-        resolve(30)
-      }, 5000))
-    ])
+        }),
+        // Add a timeout to prevent hanging
+        new Promise<number>((_, reject) => setTimeout(() => {
+          console.warn("Timeout waiting for audio metadata");
+          reject(new Error("Metadata loading timeout"));
+        }, 8000))
+      ]);
+
+      // If we got a valid duration from metadata, use it
+      if (metadataDuration && metadataDuration > 0) {
+        duration = metadataDuration;
+      }
+    } catch (metadataError) {
+      console.warn("Error getting duration from metadata:", metadataError);
+      // Continue with our estimated or default duration
+    }
 
     // Validate the audio URL by trying to fetch a small part of it
+    let urlIsValid = true;
     try {
       const testFetch = await fetch(audioUrl, { method: 'HEAD' })
       if (!testFetch.ok) {
         console.warn(`Audio URL validation failed: ${testFetch.status} ${testFetch.statusText}`)
+        urlIsValid = false;
       }
     } catch (error) {
       console.warn("Error validating audio URL:", error)
-      // Continue anyway, as the blob URL might still work
+      urlIsValid = false;
     }
 
+    // If URL validation failed, try to create a data URL instead of a blob URL
+    if (!urlIsValid) {
+      console.log("Blob URL validation failed, creating data URL instead");
+      try {
+        // Convert blob to data URL
+        const reader = new FileReader();
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(audioBlob);
+        });
+
+        console.log(`Created data URL with length: ${dataUrl.length}`);
+
+        return {
+          audio_url: dataUrl,
+          duration: duration || 30,
+          blob_size: audioBlob.size,
+        };
+      } catch (dataUrlError) {
+        console.error("Error creating data URL:", dataUrlError);
+        // Continue with the blob URL as a last resort
+      }
+    }
+
+    // Add a timestamp to the return object for debugging
     return {
       audio_url: audioUrl,
-      duration: duration || 30, // Default to 30 seconds if duration can't be determined
+      duration: duration || 30, // Use our calculated or default duration
       blob_size: audioBlob.size, // Include blob size for debugging
+      timestamp: new Date().toISOString(), // Add timestamp for debugging
     }
   } catch (error) {
     console.error("Error generating audio with Eleven Labs:", error)

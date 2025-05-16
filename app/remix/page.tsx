@@ -826,12 +826,16 @@ export default function RemixPage() {
                 {useEmbeddedPlayer ? (
                   // Enhanced embedded audio player with professional features
                   <div className="mt-4 p-4 bg-slate-50 rounded-md">
+                    <div className="flex justify-between items-center mb-2 text-xs text-gray-500">
+                      <span className="remix-current-time">00:00</span>
+                      <span className="remix-duration">00:30</span>
+                    </div>
                     <audio
                       src={remixUrl}
                       controls
                       className="w-full"
                       autoPlay={false}
-                      preload="auto"
+                      preload="metadata"
                       crossOrigin="anonymous"
                       onLoadedMetadata={(e) => {
                         // Force metadata to load properly
@@ -841,6 +845,32 @@ export default function RemixPage() {
                         console.log("Audio metadata loaded, initial duration:", audio.duration);
                         console.log("Audio source:", audio.src);
                         console.log("Audio ready state:", audio.readyState);
+
+                        // Try to estimate duration from URL if it's a data URL
+                        if (remixUrl.startsWith('data:')) {
+                          // Rough estimate: data URLs are about 1.37x the size of the binary data
+                          const estimatedBlobSize = Math.floor(remixUrl.length / 1.37);
+                          // Assuming 128 kbps MP3
+                          const bitRateKbps = 128; // 128 kbps
+                          const bitRateBytesPerSecond = (bitRateKbps * 1000) / 8;
+                          const estimatedDuration = estimatedBlobSize / bitRateBytesPerSecond;
+
+                          console.log(`Estimated duration from data URL: ${estimatedDuration.toFixed(2)} seconds`);
+
+                          // If we have a reasonable estimate and the current duration is invalid,
+                          // try to set it via a custom attribute for display purposes
+                          if (estimatedDuration > 1 &&
+                              (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0)) {
+                            // We can't directly set audio.duration as it's read-only,
+                            // but we can update the UI to show the estimated duration
+                            const durationDisplay = document.querySelector('.remix-duration');
+                            if (durationDisplay) {
+                              durationDisplay.textContent = `${Math.floor(estimatedDuration / 60)}:${
+                                Math.floor(estimatedDuration % 60).toString().padStart(2, '0')
+                              }`;
+                            }
+                          }
+                        }
 
                         // Check if we have a valid duration
                         if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
@@ -857,23 +887,38 @@ export default function RemixPage() {
                               if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
                                 console.warn("Still invalid duration, trying alternative approach");
 
-                                // Try to reload the audio completely
-                                const currentSrc = audio.src;
-                                const isBlob = currentSrc.startsWith('blob:');
+                                // Try playing a tiny bit to force metadata loading
+                                try {
+                                  audio.volume = 0.001; // Nearly silent
+                                  audio.play().then(() => {
+                                    setTimeout(() => {
+                                      audio.pause();
+                                      audio.currentTime = 0;
+                                      console.log("After play attempt, duration:", audio.duration);
+                                    }, 300);
+                                  }).catch(error => {
+                                    console.warn("Error playing audio to force metadata loading:", error);
 
-                                // For blob URLs, we need to be careful not to lose the reference
-                                if (!isBlob) {
-                                  audio.src = "";
-                                  setTimeout(() => {
-                                    audio.src = currentSrc;
-                                    audio.load();
-                                  }, 200);
-                                } else {
-                                  // For blob URLs, try a different approach
-                                  audio.load();
+                                    // If play fails, try to reload the audio completely
+                                    const currentSrc = audio.src;
+                                    const isBlob = currentSrc.startsWith('blob:');
+
+                                    if (!isBlob) {
+                                      audio.src = "";
+                                      setTimeout(() => {
+                                        audio.src = currentSrc;
+                                        audio.load();
+                                      }, 200);
+                                    } else {
+                                      // For blob URLs, try a different approach
+                                      audio.load();
+                                    }
+                                  });
+                                } catch (playError) {
+                                  console.warn("Error in play attempt:", playError);
                                 }
                               }
-                            }, 200);
+                            }, 300);
                           } catch (error) {
                             console.error("Error forcing duration calculation:", error);
                           }
@@ -935,6 +980,16 @@ export default function RemixPage() {
                       }}
                       onPlay={() => setIsPlaying(true)}
                       onPause={() => setIsPlaying(false)}
+                      onTimeUpdate={(e) => {
+                        // Update current time display
+                        const audio = e.currentTarget;
+                        const currentTimeDisplay = document.querySelector('.remix-current-time');
+                        if (currentTimeDisplay && audio.currentTime) {
+                          currentTimeDisplay.textContent = `${Math.floor(audio.currentTime / 60)}:${
+                            Math.floor(audio.currentTime % 60).toString().padStart(2, '0')
+                          }`;
+                        }
+                      }}
                     />
                   </div>
                 ) : (
