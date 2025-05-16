@@ -285,18 +285,21 @@ export async function generateBackgroundMusic(emotion: string, genre?: string, i
     let prompt = ""
 
     if (isRemix) {
-      // Enhanced prompt specifically for remixes
-      prompt = `Create a professional ${genre || 'electronic'} remix with ${emotion} mood. Include strong beats, clear melody, and dynamic structure. Make it sound like a professional studio production with perfect mastering.`
+      // Enhanced prompt specifically for remixes with more detailed instructions
+      prompt = `Create a professional ${genre || 'electronic'} remix with ${emotion} mood.
+Include strong beats, clear melody, and dynamic structure with proper intro, build-up, drop, and outro sections.
+The remix should have a tempo of 128 BPM with punchy kick drums, crisp hi-hats, and deep bass.
+Make it sound like a professional studio production with perfect mastering, clear stereo imaging, and balanced frequency spectrum.`
     } else {
       // Standard prompt for background music
       prompt = `Create background music that is ${emotion}`
       if (genre) {
         prompt += ` in the ${genre} genre`
       }
-    }
 
-    // Add quality instructions to the prompt
-    prompt += `. Make it high quality, professionally mastered audio with clear sound.`
+      // Add quality instructions to the prompt for non-remix music
+      prompt += `. Make it high quality, professionally mastered audio with clear sound.`
+    }
 
     console.log(`Generating ${isRemix ? 'remix' : 'background music'} with prompt: "${prompt}"`)
 
@@ -310,31 +313,77 @@ export async function generateBackgroundMusic(emotion: string, genre?: string, i
     const model_id = "eleven_multilingual_v2"
 
     // Voice settings optimized for music generation
-    const voice_settings = {
-      stability: 0.3,         // Lower stability for more creative variation
-      similarity_boost: 0.5,  // Balanced similarity
-      style: 0.8,             // Higher style for more expressive music
-      use_speaker_boost: true,
-      speed: 1.0              // Normal speed
+    const voice_settings = isRemix
+      ? {
+          stability: 0.2,         // Even lower stability for remixes to get more creative results
+          similarity_boost: 0.4,  // Lower similarity for more variation
+          style: 0.9,             // Higher style for more expressive music
+          use_speaker_boost: true,
+          speed: 1.0              // Normal speed
+        }
+      : {
+          stability: 0.3,         // Lower stability for more creative variation
+          similarity_boost: 0.5,  // Balanced similarity
+          style: 0.8,             // Higher style for more expressive music
+          use_speaker_boost: true,
+          speed: 1.0              // Normal speed
+        }
+
+    // For remixes, implement a retry mechanism with different voices if needed
+    const MAX_RETRY_ATTEMPTS = isRemix ? 2 : 0;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+      try {
+        // If this is a retry, use a different voice
+        const currentVoiceId = attempt === 0
+          ? voice_id
+          : attempt === 1
+            ? "pNInz6obpgDQGcFmaJgB" // Adam - Warm voice, good for music
+            : "GBv7mTt0atIp3Br8iCZE"; // Matthew - Narrator, good for instrumental
+
+        console.log(`Attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS + 1} for ${isRemix ? 'remix' : 'background music'} generation using voice ${currentVoiceId}`);
+
+        // Generate the audio with enhanced settings
+        const result = await generateElevenLabsAudio({
+          text: prompt,
+          voice_id: currentVoiceId,
+          model_id,
+          voice_settings
+        });
+
+        // Validate the result
+        if (!result.audio_url) {
+          throw new Error("Failed to generate audio URL");
+        }
+
+        // Check blob size
+        if (result.blob_size && result.blob_size < 1000) {
+          console.warn(`Generated audio blob is too small (${result.blob_size} bytes), retrying...`);
+          throw new Error(`Audio blob too small: ${result.blob_size} bytes`);
+        }
+
+        // Log the blob size for debugging
+        console.log(`Generated ${isRemix ? 'remix' : 'background music'} with blob size: ${result.blob_size || 'unknown'} bytes`);
+
+        // If we got here, the generation was successful
+        return result.audio_url;
+      } catch (error) {
+        console.error(`Error in attempt ${attempt + 1}/${MAX_RETRY_ATTEMPTS + 1}:`, error);
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        // If this is the last attempt, rethrow the error
+        if (attempt === MAX_RETRY_ATTEMPTS) {
+          throw lastError;
+        }
+
+        // Wait a bit before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
 
-    // Generate the audio with enhanced settings
-    const result = await generateElevenLabsAudio({
-      text: prompt,
-      voice_id,
-      model_id,
-      voice_settings
-    })
-
-    // Validate the result
-    if (!result.audio_url) {
-      throw new Error("Failed to generate audio URL")
-    }
-
-    // Log the blob size for debugging
-    console.log(`Generated ${isRemix ? 'remix' : 'background music'} with blob size: ${result.blob_size || 'unknown'} bytes`)
-
-    return result.audio_url
+    // This should never be reached due to the throw in the loop, but TypeScript needs it
+    throw new Error("Failed to generate audio after all attempts")
   } catch (error) {
     console.error(`Error generating ${isRemix ? 'remix' : 'background music'}:`, error)
     throw error

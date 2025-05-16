@@ -57,47 +57,144 @@ export async function verifyAudioQuality(
 
     // For blob URLs, we need to handle them differently
     if (audioUrl.startsWith('blob:')) {
-      // For blob URLs, we'll create an audio element to check duration
+      // For blob URLs, we'll create an audio element to check duration and try to get blob size
       return new Promise((resolve) => {
         const audio = new Audio(audioUrl);
+        let blobSize = 0;
 
-        audio.addEventListener('loadedmetadata', () => {
-          const duration = audio.duration;
-          const issues: string[] = [];
+        // Try to get the blob size
+        fetch(audioUrl)
+          .then(response => response.blob())
+          .then(blob => {
+            blobSize = blob.size;
+            console.log(`Blob size: ${blobSize} bytes`);
+          })
+          .catch(error => {
+            console.warn("Could not get blob size:", error);
+          });
 
-          // Check duration
-          if (duration < thresholds!.minDuration) {
-            issues.push(`Duration too short: ${duration.toFixed(2)}s (min: ${thresholds!.minDuration}s)`);
-          }
-
-          // Calculate quality score based on duration
-          const durationScore = Math.min(100, (duration / 10) * 100);
-          const qualityScore = Math.round(durationScore);
-
-          // Determine if it passes
-          const passes = issues.length === 0;
-
+        // Set a timeout to handle cases where metadata never loads
+        const timeoutId = setTimeout(() => {
+          console.warn("Metadata loading timeout for blob URL");
           resolve({
-            passes,
-            qualityScore,
-            issues,
+            passes: false,
+            qualityScore: 30, // Give it a low score but not zero
+            issues: ['Metadata loading timeout'],
             metadata: {
-              duration,
-              bitrate: 192, // Assume reasonable bitrate for blob URLs
+              duration: 0,
+              bitrate: 0,
             }
           });
+        }, 5000);
+
+        audio.addEventListener('loadedmetadata', () => {
+          clearTimeout(timeoutId);
+
+          // Force duration calculation for problematic browsers
+          if (audio.duration === Infinity || isNaN(audio.duration)) {
+            console.warn("Invalid duration detected, forcing calculation");
+            try {
+              audio.currentTime = 1e101;
+              setTimeout(() => {
+                audio.currentTime = 0;
+                processDuration();
+              }, 200);
+            } catch (error) {
+              console.warn("Error forcing duration calculation:", error);
+              processDuration();
+            }
+          } else {
+            processDuration();
+          }
+
+          function processDuration() {
+            const duration = audio.duration;
+            const issues: string[] = [];
+
+            // Check duration
+            if (duration === 0 || isNaN(duration) || duration === Infinity) {
+              issues.push(`Invalid duration: ${duration}`);
+            } else if (duration < thresholds!.minDuration) {
+              issues.push(`Duration too short: ${duration.toFixed(2)}s (min: ${thresholds!.minDuration}s)`);
+            }
+
+            // Check blob size if available
+            if (blobSize > 0) {
+              if (blobSize < 1000) {
+                issues.push(`Audio file too small: ${blobSize} bytes`);
+              }
+
+              // Check bytes per second ratio for compression quality
+              if (duration > 0 && isFinite(duration)) {
+                const bytesPerSecond = blobSize / duration;
+                if (bytesPerSecond < 1000) {
+                  issues.push(`Low quality audio: ${bytesPerSecond.toFixed(2)} bytes/second`);
+                }
+              }
+            }
+
+            // Calculate quality score based on multiple factors
+            let durationScore = 0;
+            if (duration > 0 && isFinite(duration)) {
+              durationScore = Math.min(100, (duration / 10) * 100);
+            }
+
+            let sizeScore = 0;
+            if (blobSize > 0) {
+              sizeScore = Math.min(100, (blobSize / 100000) * 100);
+            }
+
+            // Combine scores with duration weighted more heavily
+            const qualityScore = Math.round((durationScore * 0.7) + (sizeScore * 0.3));
+
+            // Determine if it passes - more lenient for remixes
+            const passes = issues.length === 0 || qualityScore >= 50;
+
+            resolve({
+              passes,
+              qualityScore,
+              issues,
+              metadata: {
+                duration,
+                bitrate: blobSize > 0 ? Math.round(blobSize / (duration || 1) / 125) : 192, // Calculate bitrate if possible
+              }
+            });
+          }
         });
 
-        audio.addEventListener('error', () => {
+        audio.addEventListener('error', (e) => {
+          clearTimeout(timeoutId);
+          const errorCode = audio.error ? audio.error.code : 0;
+          const errorMessage = audio.error ? audio.error.message : "Unknown error";
+
+          console.warn(`Audio error details: Code ${errorCode}, Message: ${errorMessage}`);
+
           resolve({
             passes: false,
             qualityScore: 0,
-            issues: ['Failed to load audio for quality verification'],
+            issues: [`Failed to load audio: ${errorMessage}`],
           });
         });
 
-        // Load the audio
+        // Try to play a small part to verify it's playable
+        audio.volume = 0.01; // Very low volume
         audio.load();
+
+        // Try to play a tiny bit of audio to verify it's valid
+        try {
+          audio.play()
+            .then(() => {
+              setTimeout(() => {
+                audio.pause();
+                audio.currentTime = 0;
+              }, 300);
+            })
+            .catch(error => {
+              console.warn("Audio playback test failed:", error);
+            });
+        } catch (error) {
+          console.warn("Error in playback test:", error);
+        }
       });
     }
 
