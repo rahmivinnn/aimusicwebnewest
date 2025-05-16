@@ -13,6 +13,7 @@ import { FileUpload } from "@/components/ui/file-upload"
 import { generateRemixTrack } from "../actions/audio-actions"
 import { useToast } from "@/components/ui/use-toast"
 import { Download, Play, Pause, Volume2, VolumeX, Music, Wand2, Upload, RefreshCw } from "lucide-react"
+import { SingleAudioPlayer } from "@/components/single-audio-player"
 
 export default function RemixPage() {
   // Basic state
@@ -823,213 +824,26 @@ export default function RemixPage() {
                   )}
                 </div>
 
-                {useEmbeddedPlayer ? (
-                  // Enhanced embedded audio player with professional features
-                  <div className="mt-4 p-4 bg-slate-50 rounded-md">
-                    <div className="flex justify-between items-center mb-2 text-xs text-gray-500">
-                      <span className="remix-current-time">00:00</span>
-                      <span className="remix-duration">00:30</span>
-                    </div>
-                    <audio
+                {/* Use our new SingleAudioPlayer component */}
+                <div className="mt-4 p-4 bg-slate-50 rounded-md">
+                  {remixUrl && (
+                    <SingleAudioPlayer
                       src={remixUrl}
-                      controls
-                      className="w-full"
-                      autoPlay={false}
-                      preload="metadata"
-                      crossOrigin="anonymous"
-                      onLoadedMetadata={(e) => {
-                        // Force metadata to load properly
-                        const audio = e.currentTarget;
-
-                        // Log the audio details for debugging
-                        console.log("Audio metadata loaded, initial duration:", audio.duration);
-                        console.log("Audio source:", audio.src);
-                        console.log("Audio ready state:", audio.readyState);
-
-                        // Try to estimate duration from URL if it's a data URL
-                        if (remixUrl.startsWith('data:')) {
-                          // Rough estimate: data URLs are about 1.37x the size of the binary data
-                          const estimatedBlobSize = Math.floor(remixUrl.length / 1.37);
-                          // Assuming 128 kbps MP3
-                          const bitRateKbps = 128; // 128 kbps
-                          const bitRateBytesPerSecond = (bitRateKbps * 1000) / 8;
-                          const estimatedDuration = estimatedBlobSize / bitRateBytesPerSecond;
-
-                          console.log(`Estimated duration from data URL: ${estimatedDuration.toFixed(2)} seconds`);
-
-                          // If we have a reasonable estimate and the current duration is invalid,
-                          // try to set it via a custom attribute for display purposes
-                          if (estimatedDuration > 1 &&
-                              (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0)) {
-                            // We can't directly set audio.duration as it's read-only,
-                            // but we can update the UI to show the estimated duration
-                            const durationDisplay = document.querySelector('.remix-duration');
-                            if (durationDisplay) {
-                              durationDisplay.textContent = `${Math.floor(estimatedDuration / 60)}:${
-                                Math.floor(estimatedDuration % 60).toString().padStart(2, '0')
-                              }`;
-                            }
-                          }
-                        }
-
-                        // Check if we have a valid duration
-                        if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
-                          console.warn("Invalid duration detected, forcing calculation");
-
-                          // Force duration calculation for problematic browsers
-                          try {
-                            audio.currentTime = 1e101;
-                            setTimeout(() => {
-                              audio.currentTime = 0;
-                              console.log("After forcing calculation, duration:", audio.duration);
-
-                              // If still invalid, try a more aggressive approach
-                              if (audio.duration === Infinity || isNaN(audio.duration) || audio.duration === 0) {
-                                console.warn("Still invalid duration, trying alternative approach");
-
-                                // Try playing a tiny bit to force metadata loading
-                                try {
-                                  audio.volume = 0.001; // Nearly silent
-                                  audio.play().then(() => {
-                                    setTimeout(() => {
-                                      audio.pause();
-                                      audio.currentTime = 0;
-                                      console.log("After play attempt, duration:", audio.duration);
-                                    }, 300);
-                                  }).catch(error => {
-                                    console.warn("Error playing audio to force metadata loading:", error);
-
-                                    // If play fails, try to reload the audio completely
-                                    const currentSrc = audio.src;
-                                    const isBlob = currentSrc.startsWith('blob:');
-
-                                    if (!isBlob) {
-                                      audio.src = "";
-                                      setTimeout(() => {
-                                        audio.src = currentSrc;
-                                        audio.load();
-                                      }, 200);
-                                    } else {
-                                      // For blob URLs, try a different approach
-                                      audio.load();
-                                    }
-                                  });
-                                } catch (playError) {
-                                  console.warn("Error in play attempt:", playError);
-                                }
-                              }
-                            }, 300);
-                          } catch (error) {
-                            console.error("Error forcing duration calculation:", error);
-                          }
-                        }
-                      }}
-                      onDurationChange={(e) => {
-                        // Additional event to catch duration changes
-                        console.log("Duration changed:", e.currentTarget.duration);
-                      }}
-                      onCanPlay={() => {
-                        console.log("Audio can play now");
-                        // Force a redraw of the audio element to update the UI
-                        const container = document.querySelector(".mt-4.p-4.bg-slate-50.rounded-md");
-                        if (container) {
-                          container.classList.add("audio-ready");
-                        }
-                      }}
-                      onError={(e) => {
-                        console.error("Audio error:", e);
-                        // Enhanced error handling with multiple fallback attempts
-                        const audio = e.currentTarget;
-                        const errorCode = audio.error ? audio.error.code : 0;
-                        const errorMessage = audio.error ? audio.error.message : "Unknown error";
-
-                        console.warn(`Audio error details: Code ${errorCode}, Message: ${errorMessage}`);
-
-                        // Show a toast with the error
+                      fallbackSrc={getFallbackUrl(genre)}
+                      downloadFilename={`remix-${new Date().getTime()}.mp3`}
+                      onError={(error) => {
+                        console.error("Audio player error:", error);
                         toast({
                           title: "Audio playback issue",
-                          description: "Using fallback audio instead",
+                          description: "There was a problem playing the audio. Using fallback.",
                           variant: "warning",
                         });
-
-                        // Try to reload with a different source if there's an error
-                        if (audio.src === remixUrl) {
-                          // First try: Use genre-specific fallback
-                          const fallbackUrl = getFallbackUrl(genre);
-                          console.log("Using genre-specific fallback:", fallbackUrl);
-
-                          // Set the source and load
-                          audio.src = fallbackUrl;
-                          audio.load();
-
-                          // Add a one-time error handler for the fallback
-                          const fallbackErrorHandler = () => {
-                            console.warn("Fallback audio also failed, using guaranteed fallback");
-
-                            // Second try: Use the most reliable fallback
-                            audio.src = "/samples/edm-remix-sample.mp3";
-                            audio.load();
-
-                            // Remove this error handler to prevent loops
-                            audio.removeEventListener('error', fallbackErrorHandler);
-                          };
-
-                          // Add the error handler for one-time use
-                          audio.addEventListener('error', fallbackErrorHandler, { once: true });
-                        }
-                      }}
-                      onPlay={() => setIsPlaying(true)}
-                      onPause={() => setIsPlaying(false)}
-                      onTimeUpdate={(e) => {
-                        // Update current time display
-                        const audio = e.currentTarget;
-                        const currentTimeDisplay = document.querySelector('.remix-current-time');
-                        if (currentTimeDisplay && audio.currentTime) {
-                          currentTimeDisplay.textContent = `${Math.floor(audio.currentTime / 60)}:${
-                            Math.floor(audio.currentTime % 60).toString().padStart(2, '0')
-                          }`;
-                        }
                       }}
                     />
-                  </div>
-                ) : (
-                  // Advanced audio controls
-                  <div className="space-y-2">
-                    <div className="flex justify-between">
-                      <label className="text-sm font-medium">Volume</label>
-                      <span className="text-sm">{volume}%</span>
-                    </div>
-                    <Slider
-                      value={[volume]}
-                      min={0}
-                      max={100}
-                      step={1}
-                      onValueChange={(value) => setVolume(value[0])}
-                    />
-                  </div>
-                )}
+                  )}
+                </div>}
 
-                {/* Download button for both player types */}
-                {remixUrl && (
-                  <div className="mt-4">
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        // Create a temporary link to download the audio
-                        const link = document.createElement('a');
-                        link.href = remixUrl;
-                        link.download = `remix-${new Date().getTime()}.mp3`;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                      }}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      Download Remix
-                    </Button>
-                  </div>
-                )}
+                {/* Download button is now included in the SingleAudioPlayer component */}
               </div>
             )}
 
